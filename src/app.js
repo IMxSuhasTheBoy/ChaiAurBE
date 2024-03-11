@@ -3,7 +3,7 @@ import cookieParser from "cookie-parser"; ///access & set cookies from user brow
 import cors from "cors"; ///Docs https://github.com/expressjs/cors#readme ///Explore config options
 /***Enabling CORS lets the server tell the browser it's permitted to use an additional origin.
  *https://web.dev/articles/cross-origin-resource-sharing
-*/
+ */
 
 const app = express();
 
@@ -17,5 +17,12 @@ app.use(express.json({ limit: "16kb" })); ///Docs https://expressjs.com/en/5x/ap
 app.use(urlencoded({ extended: true, limit: "16kb" })); ///Docs https://expressjs.com/en/5x/api.html#express.urlencoded
 app.use(express.static("public")); ///Docs https://expressjs.com/en/5x/api.html#express.static
 app.use(cookieParser()); ///Github https://github.com/expressjs/cookie-parser#readme
+
+//TODO: routes imports
+import userRouter from "./routes/user.routes.js";
+
+//TODO: routes declaration
+app.use("/api/v1/users", userRouter)
+
 
 export { app };

@@ -1,5 +1,5 @@
 import mongoose, { Schema, Model } from "mongoose";
-import jwt from "jsonwebtoken"; //* JWT is a bearer token (refrence a key of whose whoever owns it).
+import jwt from "jsonwebtoken"; //* JWT is a bearer token (a key: who owns it, gets access).
 //Docs : https://github.com/auth0/node-jsonwebtoken#readme
 
 import bcrypt from "bcrypt";
@@ -54,9 +54,6 @@ const userSchema = new Schema(
   }
 );
 
-
-
-
 //TODO: only exicute the middleware on password changes, Is to be taken care of.
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
@@ -65,16 +62,12 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-
-
-//---------------------- Additional methods in schema object ---------------------- 
+//---------------------- Additional methods in schema object ----------------------
 //TODO: To compare (PW received in user req.) with the (recent saved PW).
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 //! returns boolean result.
-
-
 
 //TODO: To generate access token & refresh token, With JWT.
 userSchema.methods.generateAccessToken = async function () {
@@ -89,7 +82,7 @@ userSchema.methods.generateAccessToken = async function () {
     {
       expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
     }
-  )
+  );
 };
 
 userSchema.methods.generateRefreshToken = async function () {
@@ -101,14 +94,8 @@ userSchema.methods.generateRefreshToken = async function () {
     {
       expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
     }
-  )
+  );
 };
 //---------------------- Additional methods in schema object-----------------------
-
-
-
-
-
-
 
 export const User = mongoose.model("User", userSchema);
