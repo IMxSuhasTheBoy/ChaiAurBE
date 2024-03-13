@@ -4,6 +4,28 @@ import { ApiError } from "../utils/ApiError.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
+const generateAccessAndRefereshTokens = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+
+    //* as userSchema having refreshToken field, it is for having value with this method call
+    user.refreshToken = refreshToken;
+
+    await user.save({ validateBeforeSave: false });
+
+    // console.log("genAccRefTokens", user);
+
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Something went wrong while generating referesh and access token! ! !"
+    );
+  }
+};
+
 const registerUser = asyncHandler(async (req, res) => {
   /* test res.status(200).json({
     message: "Chai Aur Code",
@@ -90,4 +112,99 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, createdUser, "User registered successfully!!!"));
 });
 
-export { registerUser };
+const loginUser = asyncHandler(async (req, res) => {
+  //TODO: 1
+  const { email, username, password } = req.body;
+
+  //TODO: 2
+  if (!username && !email) {
+    throw new ApiError(400, "Username and Email is reqired! ! !");
+  }
+
+  // Here is an alternative of above code based on logic :
+  // if (!(username || email)) {
+  //     throw new ApiError(400, "username or email is required")
+  // }
+
+  //TODO: 3
+  const user = await User.findOne({
+    $or: [{ email }, { username }],
+  });
+
+  if (!user) {
+    throw new ApiError(404, "User does't exist! ! !");
+  }
+
+  //TODO: 4
+  //*bcrypt: additional methods in schema Object instance, user is our instance of User Schema
+  const isPasswordValid = await user.isPasswordCorrect(password);
+
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid user credentials! ! !");
+  }
+
+  //TODO: 5
+  const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(
+    user._id
+  );
+
+  //TODO: 6.1
+  //? update variable of user object with accessToken / Have variable of user instance From DB with unnecessary fields ommited
+
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+
+  //TODO: 6.2
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        },
+        "User logged In Successfully!!!"
+      )
+    );
+});
+
+const logoutUser = asyncHandler(async (req, res) => {
+  // console.log("logoutUser verifiedJWT", req.user._id);
+
+  //TODO: 2.1 2.2
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $unset: {
+        refreshToken: 1, // this removes the field from document
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  //TODO: 2.3
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User logged Out!!!"));
+});
+
+export { registerUser, loginUser, logoutUser };
