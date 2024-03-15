@@ -22,7 +22,7 @@ const generateAccessAndRefereshTokens = async (userId) => {
   } catch (error) {
     throw new ApiError(
       500,
-      "Something went wrong while generating referesh and access token! ! !"
+      "Something went wrong while generating refresh and access token! ! !"
     );
   }
 };
@@ -263,4 +263,44 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 });
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken };
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+  //TODO: 1
+  const { oldPassword, newPassword } = req.body;
+
+  //TODO: 2
+  //  const passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}$/;
+  //  if (!passwordRegex.test(newPassword)) {
+  //    throw new ApiError(400, "Password does not meet the criteria. Please use a password with at least 8 characters, including uppercase, lowercase, numbers, and special characters! ! !");
+  //  }
+
+  //TODO: 3
+  const user = await User.findById(req.user?._id);
+
+  //TODO: 4
+  const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+  if (!isPasswordCorrect) {
+    throw new ApiError(400, "Invalid old password! ! !");
+  }
+
+  //TODO: 5
+  user.password = newPassword;
+
+  //TODO: 6
+  await user.save({ validateBeforeSave: false });
+
+  //TODO: 7
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password Changed successfully!!!"));
+});
+
+
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken,
+  changeCurrentPassword,
+  
+};
