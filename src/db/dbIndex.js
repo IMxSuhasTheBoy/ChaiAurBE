@@ -2,6 +2,11 @@
 import mongoose from "mongoose";
 import { DB_NAME } from "../constants.js";
 
+/**
+ * Connects to the MongoDB database.
+ *
+ * @return {Promise<void>} - A promise that resolves when the connection is established.
+ */
 const connectDB = async () => {
   if (!process.env.MONGODB_URI) {
     console.error(
@@ -35,7 +40,5 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
-
-//* any async func as above returns a promise, in this case will be using it to export & on exicution will listen to express app in the index.js file.
 
 export default connectDB;
