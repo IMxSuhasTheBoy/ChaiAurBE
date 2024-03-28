@@ -27,7 +27,7 @@ router.route("/register").post(
       name: "coverImage",
       maxCount: 1,
     },
-  ]),
+  ]), //TODO: set max size limits for avatar and cover image
   registerUser
 );
 
