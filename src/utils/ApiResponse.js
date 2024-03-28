@@ -1,3 +1,10 @@
+/**
+ * Represents an API response.
+ * @constructor
+ * @param {number} statusCode - The status code of the response.
+ * @param {any} data - The data included in the response.
+ * @param {string} [message=Success] - The message associated with the response.
+ */
 class ApiResponse {
   constructor(statusCode, data, message = "Success") {
     this.statusCode = statusCode;
