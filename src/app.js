@@ -12,7 +12,7 @@ app.use(
     origin: process.env.CORS_ORIGIN,
     credentials: true,
   })
-); ///for dev phase origin is set to * , it must be changed as per deployment/hosting config
+); //!NOTE: for dev phase origin is set to *, it must be changed as per deployment/hosting config
 app.use(express.json({ limit: "16kb" })); ///Docs https://expressjs.com/en/5x/api.html#express.json
 app.use(urlencoded({ extended: true, limit: "16kb" })); ///Docs https://expressjs.com/en/5x/api.html#express.urlencoded
 app.use(express.static("public")); ///Docs https://expressjs.com/en/5x/api.html#express.static
