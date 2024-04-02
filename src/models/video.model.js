@@ -1,4 +1,4 @@
-import mongoose, { Schema, Model } from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2"; //?plugin as middleware. for more powerfull queries.
 ///Docs : https://github.com/aravindnc/mongoose-aggregate-paginate-v2#readme //TODO: mongoDB aggregate pipelines
 ///docs : https://mongoosejs.com/docs/middleware.html
@@ -10,7 +10,7 @@ const videoSchema = new Schema(
       type: String,
       required: true,
     },
-    thumbnail:{
+    thumbnail: {
       type: String,
       required: true,
     },
@@ -18,32 +18,32 @@ const videoSchema = new Schema(
       type: String,
       required: true,
     },
-    description:{
+    description: {
       type: String,
       required: true,
     },
-    duration:{
+    duration: {
       type: Number,
       required: true,
     },
     views: {
       type: Number,
-      default: 0
+      default: 0,
     },
     isPublished: {
       type: Boolean,
-      default: true
+      default: true,
     },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: "User"
-    }
+      ref: "User",
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
-videoSchema.plugin(mongooseAggregatePaginate)
+videoSchema.plugin(mongooseAggregatePaginate);
 
-export const Video = Model("Video", videoSchema);
+export const Video = mongoose.model("Video", videoSchema);
