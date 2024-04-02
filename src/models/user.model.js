@@ -1,4 +1,4 @@
-import mongoose, { Schema, Model } from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import jwt from "jsonwebtoken"; //* JWT is a bearer token (a key: who owns it, gets access).
 //Docs : https://github.com/auth0/node-jsonwebtoken#readme
 
