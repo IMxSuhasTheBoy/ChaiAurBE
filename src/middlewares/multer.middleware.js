@@ -1,4 +1,5 @@
 import multer from "multer"; //Docs : https://github.com/expressjs/multer#readme
+import path from "path";
 
 //Docs : https://github.com/expressjs/multer?tab=readme-ov-file#diskstorage
 const storage = multer.diskStorage({
@@ -7,9 +8,9 @@ const storage = multer.diskStorage({
   },
 
   filename: function (req, file, cb) {
-    cb(null, file.originalname); //! configure as per requirement, may multiple files of same name can be uploaded (will be overriden)
-
-    console.log(file, "=====", file.fieldname, file.originalname, "Multer");
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const originalExtension = path.extname(file.originalname);
+    cb(null, file.fieldname + "-" + uniqueSuffix + originalExtension); //! configure as per requirement, may multiple files of same name can be uploaded (will be overriden)
   },
 });
 
