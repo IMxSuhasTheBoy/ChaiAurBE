@@ -95,13 +95,16 @@ const registerUser = asyncHandler(async (req, res) => {
   if (!avatarLocalPath) {
     throw new ApiError(
       400,
-      "Avatar file is reqired!!! not stored in local! ! !"
+      "Avatar file is required!!! not stored in local! ! !"
     );
   }
 
   //TODO: 4.3
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  const avatar = await uploadOnCloudinary(avatarLocalPath, "users/avatar");
+  const coverImage = await uploadOnCloudinary(
+    coverImageLocalPath,
+    "users/coverImage"
+  );
   // console.log("TODO: 4.3", avatar, coverImage);
 
   //TODO: 4.4
@@ -379,17 +382,18 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 const updateUserAvatar = asyncHandler(async (req, res) => {
   //TODO: 4.1
   const oldAvatarCloudUrl = req.user.avatar;
+  const folderPath = "chaiaurbe/users/avatars/";
 
   //TODO: 1
   const avatarLocalPath = req.file?.path;
-  console.log(avatarLocalPath, "avatarLocalPath updateUserAvatar");
+  // console.log(avatarLocalPath, "avatarLocalPath updateUserAvatar");
 
   if (!avatarLocalPath) {
     throw new ApiError(400, "Avatar file is missing! ! !");
   }
 
   //TODO: 2
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  const avatar = await uploadOnCloudinary(avatarLocalPath, "users/avatar");
 
   if (!avatar.url) {
     throw new ApiError(400, "Something went wrong while uploading avatar! ! !");
@@ -407,9 +411,12 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
   ).select("-password");
 
   //TODO: 4.2
-  const deletedOldAvatarResponse =
-    await destroyFileOnCloudinary(oldAvatarCloudUrl);
+  const deletedOldAvatarResponse = await destroyFileOnCloudinary(
+    folderPath,
+    oldAvatarCloudUrl
+  );
 
+  // console.log(deletedOldAvatarResponse, "deletedOldAvatarResponse");
   //TODO: 5
   return res
     .status(200)
@@ -432,7 +439,10 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
   }
 
   //TODO: 2
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  const coverImage = await uploadOnCloudinary(
+    coverImageLocalPath,
+    "users/coverImage"
+  );
 
   if (!coverImage.url) {
     throw new ApiError(
