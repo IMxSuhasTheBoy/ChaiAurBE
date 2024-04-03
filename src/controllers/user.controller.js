@@ -411,12 +411,8 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
   ).select("-password");
 
   //TODO: 4.2
-  const deletedOldAvatarResponse = await destroyFileOnCloudinary(
-    folderPath,
-    oldAvatarCloudUrl
-  );
+  await destroyFileOnCloudinary(folderPath, oldAvatarCloudUrl);
 
-  // console.log(deletedOldAvatarResponse, "deletedOldAvatarResponse");
   //TODO: 5
   return res
     .status(200)
@@ -425,10 +421,14 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
   //TODO: 4.1
-  let oldcoverImageCloudUrl = "";
-  if (!req.user.coverImage === "") {
+  let coverImageOldCloudUrl = "";
+  const folderPath = "chaiaurbe/users/cover-images/";
+
+  //Strategy: Case: user haven't uploaded coverImage when registered, don't need to destroy coverImageOldCloudUrl.
+  // Case: user had uploaded coverImage when registered, call destroy coverImageOldCloudUrl.
+  if (req.user?.coverImage === "") {
   } else {
-    oldcoverImageCloudUrl = req.user.coverImage;
+    coverImageOldCloudUrl = req.user?.coverImage;
   }
 
   //TODO: 1 new
@@ -462,10 +462,19 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     { new: true }
   ).select("-password");
 
-  //TODO: 4.2
-  if (oldcoverImageCloudUrl != "") {
-    const deletedOldcoverImageResponse = await destroyFileOnCloudinary(
-      oldcoverImageCloudUrl
+  if (!user.coverImage === coverImage.url) {
+    throw new ApiError(
+      500,
+      "Something went wrong while updating cover image in database! ! !"
+    );
+  }
+  //? will destroy call exicute only after db updation success?
+
+  //TODO: 4.2 strategy for calling destroy only if the coverImage was uploaded on registeration
+  if (coverImageOldCloudUrl !== "") {
+    const destroyResponse = await destroyFileOnCloudinary(
+      folderPath,
+      coverImageOldCloudUrl
     );
   }
 
