@@ -210,13 +210,92 @@ const getVideoById = asyncHandler(async (req, res) => {
   }
 });
 
+//TODO: update video details title, description, thumbnail if atleast any one from it provided
+const updateVideo = asyncHandler(async (req, res) => {
+  //TODO: 1
+  const { videoId } = req.params;
 
-export {
-  getAllVideos,
-  publishAVideo,
-  getVideoById,
- 
-};
+  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+    throw new ApiError(400, "Invalid video id or not provided! ! !");
+  }
+
+  const video = await Video.findById(videoId).exec();
+  // console.log(video, ": video");
+
+  if (!video) {
+    throw new ApiError(404, "Video not found! ! !");
+  }
+
+  //TODO: 2 check if the user is the owner of the video
+  if (video?.videoOwner.toString() !== req.user?._id.toString()) {
+    throw new ApiError(
+      403,
+      "You are not authorized to update details of this video! ! !"
+    );
+  }
+  //? try catch block not worked for my logic
+  //TODO: 3 set new details to video & thumbnail if provided
+  const { title, description } = req.body;
+  const thumbnailLocalPath = req.file?.path; //undefined if not provided
+  // console.log(thumbnailLocalPath, ": thumbnailLocalPath");
+
+  //!Most important checks to enter or not in DB updation operation if atleast any one is provided
+  if (
+    (title && title.trim() !== "") ||
+    (description && description.trim() !== "") ||
+    thumbnailLocalPath !== undefined
+  ) {
+    console.log("~ DB & cloud video details Update Operation initated~");
+    if (title && title.trim() !== "") {
+      video.title = title;
+    }
+    if (description && description.trim() !== "") {
+      video.description = description;
+    }
+
+    //TODO: 4 Have old thumbnail access
+    const oldThumbnailUrl = video.thumbnail;
+    const folderPath = "chaiaurbe/videos/thumbnails/";
+
+    //TODO: 5 Upload new thumbnail if provided ? assign it  : error
+    let thumbnail = undefined; //will be new thumbnail if upload success remains else undefined
+    if (thumbnailLocalPath !== undefined) {
+      thumbnail = await uploadOnCloudinary(
+        thumbnailLocalPath,
+        "videos/thumbnailFile"
+      );
+      // console.log(thumbnail, ": thumbnail in TODO 5");
+
+      if (!thumbnail.url && thumbnail.url === "") {
+        throw new ApiError(500, "Error in uploading thumbnail! ! !"); ///! try givivng error then decide for eeeror handling
+      } else {
+        video.thumbnail = thumbnail.url;
+      }
+    }
+    // console.log(thumbnail, ": thumbnail out TODO 5");
+    //TODO: 6 | till Step 5 all details are set to video if provided |, now save video details in DB
+    const updatedVideo = await video.save(
+      { validateBeforeSave: false },
+      { new: true }
+    );
+    // console.log(updatedVideo, ": TODO 6 : updatedVideo");
+
+    //TODO: 7 destroy old if cloud uploaded matches with DB updated ? destroy Old : move
+    if (updatedVideo?.thumbnail === thumbnail?.url) {
+      await destroyFileOnCloudinary(folderPath, oldThumbnailUrl);
+    }
+    //TODO: 8 return response
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, video, "Video details updated successfully!!!")
+      );
+  } else {
+    throw new ApiError(400, "No details provided to update! ! !");
+  }
+});
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo };
 
 //!Experimental
 /** async function uploadWithRetry(file) {
