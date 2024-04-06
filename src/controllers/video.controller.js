@@ -182,11 +182,40 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 });
 
+const getVideoById = asyncHandler(async (req, res) => {
+  //TODO: 1 //? checks of this fn should be according to purpose of this fn(clearly defined later maybe), OR WEB-APP may require another similar fn for another similar access control
+  const { videoId } = req.params;
+  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+    throw new ApiError(400, "Invalid video id or not provided! ! !");
+  }
+
+  //TODO: 2
+  try {
+    const video = await Video.findById(videoId).exec();
+
+    if (
+      !video ||
+      (!video?.isPublished &&
+        video?.videoOwner.toString() !== req.user?._id.toString()) //!Need to make changes as per strategy requirements, this strategy is for loggedin users having access to his videos
+    ) {
+      throw new ApiError(404, "Video not found! ! !");
+    }
+
+    //TODO: 3
+    return res
+      .status(200)
+      .json(new ApiResponse(200, video, "Video fetched successfully!!!"));
+  } catch (error) {
+    throw new ApiError(500, error?.message || "Error fetching the video! ! !");
+  }
+});
+
 
 export {
   getAllVideos,
   publishAVideo,
-  
+  getVideoById,
+ 
 };
 
 //!Experimental
