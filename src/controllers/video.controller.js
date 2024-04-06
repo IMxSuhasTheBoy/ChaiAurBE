@@ -295,7 +295,59 @@ const updateVideo = asyncHandler(async (req, res) => {
   }
 });
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo };
+const deleteVideo = asyncHandler(async (req, res) => {
+  //TODO: 1
+  const { videoId } = req.params;
+
+  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+    throw new ApiError(400, "Invalid video id or not provided! ! !");
+  }
+
+  //TODO: 2
+  const video = await Video.findById(videoId).exec();
+
+  console.log(video, ": video to delete");
+  if (!video) {
+    throw new ApiError(404, "Video not found! ! !");
+  }
+
+  //TODO: 3
+  if (video?.videoOwner.toString() !== req.user?._id.toString()) {
+    throw new ApiError(403, "You are not authorized to delete this video! ! !");
+  }
+
+  //TODO: 4
+  const oldVideo = video.videoFile;
+  const oldThumbnail = video.thumbnail;
+  const videoFolderPath = "chaiaurbe/videos/video-files/";
+  const thumbnailFolderPath = "chaiaurbe/videos/thumbnails/";
+
+  //TODO: 5
+  const destroyedVideo = await video.deleteOne().exec();
+
+  // console.log(destroyedVideo, ": destroyedVideo"); //deleteOne() response : { acknowledged: true, deletedCount: 1 }
+  if (
+    !destroyedVideo &&
+    destroyedVideo.deletedCount === 0 &&
+    destroyedVideo.acknowledged === false
+  ) {
+    throw new ApiError(500, "failed to delete the video! ! !");
+  } else {
+    //TODO: 6
+    await destroyFileOnCloudinary(videoFolderPath, oldVideo);
+
+    await destroyFileOnCloudinary(thumbnailFolderPath, oldThumbnail);
+  }
+
+  //TODO: 7
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, destroyedVideo, "Video deleted successfully!!!")
+    );
+});
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo };
 
 //!Experimental
 /** async function uploadWithRetry(file) {
