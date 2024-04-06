@@ -104,10 +104,89 @@ const getAllVideos = asyncHandler(async (req, res) => {
   }
 });
 
+//TODO: Publish a video title, description, isPublished, videoFile, thumbnailFile
+const publishAVideo = asyncHandler(async (req, res) => {
+  //TODO✔ if any of videoFile or thumbnailFile is failed to upload cloud, throw error / delete cloud files of uploaded one of it
+  //TODO: 1
+  const { title, description, isPublished = true } = req.body;
+  // console.log("\n",req.files,"\n"," : req.files 1","\n",title,"\n",description,"\n",isPublished," : req.body" "\n");
+  //TODO: 2
+  const videoFileLocalPath = req.files?.videoFile?.[0].path;
+  const thumbnailFileLocalPath = req.files?.thumbnail?.[0].path;
+  // console.log("\n",videoFileLocalPath,"\n",thumbnailFileLocalPath," : paths 2 \n");
+
+  //made fn to check is string/property type string empty ?
+  const isFieldEmpty = (field) => !field || field.trim() === "";
+  if (
+    isFieldEmpty(title) ||
+    isFieldEmpty(description) ||
+    isFieldEmpty(videoFileLocalPath) ||
+    isFieldEmpty(thumbnailFileLocalPath)
+  ) {
+    throw new ApiError(
+      400,
+      "All fields and files are required and should not be empty.! ! !"
+    );
+  }
+
+  //TODO: 3 Files upload on cloud operations (all required fields are ready)
+  const videoFile = await uploadOnCloudinary(
+    videoFileLocalPath,
+    "videos/videoFile"
+  );
+
+  //!Test videoFile = null;
+  //TODO: 4 try thumbnail cloud upload after succesfull video upload
+  let thumbnailFile = undefined;
+  if (!videoFile && isFieldEmpty(videoFile?.url)) {
+    throw new ApiError(
+      500,
+      "Something went wrong while uploading videoFile! ! !"
+    );
+  } else {
+    // console.log("video upload successfully try thumbnail upload!!!");
+    thumbnailFile = await uploadOnCloudinary(
+      thumbnailFileLocalPath,
+      "videos/thumbnailFile"
+    );
+  } //TODO? make thumbnail upload operation repeats/retries itself till succeedes || some tries, if userr cancels process give below error*
+
+  //!Test thumbnailFile = "";
+  //TODO: 5 thumbnailFile failed to upload on cloud ? then destroy Uploaded cloud videoFile & throw error : move
+  if (thumbnailFile === undefined || isFieldEmpty(thumbnailFile?.url)) {
+    const videoFolderPath = "chaiaurbe/videos/video-files/";
+    await destroyFileOnCloudinary(videoFolderPath, videoFile.url);
+
+    throw new ApiError(500, "Something went wrong while uploading files! ! !");
+
+    //?Delete cloud uploaded video
+  }
+
+  //TODO: 6 create video in DB (all required fields are ready)
+  try {
+    const video = await Video.create({
+      title,
+      description,
+      videoFile: videoFile?.url,
+      thumbnail: thumbnailFile?.url,
+      duration: videoFile?.duration,
+      videoOwner: req.user?._id,
+      isPublished,
+    });
+    //TODO: 7 return response with created document
+    return res
+      .status(201)
+      .json(new ApiResponse(200, video, "Video published successfully!!!"));
+  } catch (error) {
+    throw new ApiError(500, "Something went wrong while publishing video! ! !");
+  }
+});
+
 
 export {
   getAllVideos,
- 
+  publishAVideo,
+  
 };
 
 //!Experimental
