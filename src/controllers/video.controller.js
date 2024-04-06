@@ -347,7 +347,61 @@ const deleteVideo = asyncHandler(async (req, res) => {
     );
 });
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo };
+const togglePublishStatus = asyncHandler(async (req, res) => {
+  //TODO: 1
+  const { videoId } = req.params;
+
+  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+    throw new ApiError(400, "Invalid video id or not provided! ! !");
+  }
+
+  try {
+    //TODO: 2
+    const video = await Video.findById(videoId)
+      .select("videoOwner isPublished")
+      .exec();
+
+    if (!video) {
+      throw new ApiError(404, "Video not found! ! !");
+    }
+
+    // check if the user is the owner of the video
+    if (video?.videoOwner.toString() !== req.user?._id.toString()) {
+      throw new ApiError(
+        403,
+        "You are not authorized to update status of this video! ! !"
+      );
+    }
+
+    //TODO: 3
+    video.isPublished = !video.isPublished;
+
+    await video.save();
+    //TODO: 4
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          video,
+          "Video publish status updated successfully!!!"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error in updating video publish status! ! !"
+    );
+  }
+});
+export {
+  getAllVideos,
+  publishAVideo,
+  getVideoById,
+  updateVideo,
+  deleteVideo,
+  togglePublishStatus,
+};
 
 //!Experimental
 /** async function uploadWithRetry(file) {
