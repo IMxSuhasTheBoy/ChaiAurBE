@@ -8,7 +8,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 //? allow subscription feature only if any(his) video have videoOwner field of that user, So that user as channel,( by adding a isChannel boolean field in User model using aggrigation addField )
 //? have another similar access control with a createChannel fn for user to create a channel & allow feature of subscription
 const toggleSubscription = asyncHandler(async (req, res) => {
-  //TODO: 1
+  //TODO: 1 get channelId whose user wants to toggle subscription.
   const { channelId } = req.params;
 
   if (!channelId) {
@@ -67,16 +67,82 @@ const toggleSubscription = asyncHandler(async (req, res) => {
   }
 });
 
-// controller to return subscriber list of a channel : GET all that docs where channel: channelId = then u got subscribers count the channelId has by picking up each subscriber field from that docs get who has subscribed
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {
+  //TODO: 1 user who wants to get his subscribers list
   const { channelId } = req.params;
+  const userId = req.user?._id.toString();
 
-  
+  if (!channelId) {
+    throw new ApiError(400, "Channel ID is required! ! !");
+  } else if (!isValidObjectId(channelId)) {
+    throw new ApiError(400, "Invalid Channel ID! ! !");
+  }
+
+  //?Strategy addition: userId equals channelId ? give subscribers details list, count : give count.  (addition depends upon usage need)
+  if (userId !== channelId) {
+    throw new ApiError(
+      403,
+      "You cannot view subscribers of others channel! ! !"
+    );
+  }
+
+  //TODO: 2 get channel subscribers [documents] whose channel field matches channelId -> extract subscriber field from that documents
+  try {
+    const channelSubscribers = await Subscription.aggregate([
+      {
+        $match: {
+          channel: new mongoose.Types.ObjectId(channelId),
+        },
+      },
+      {
+        $lookup: {
+          from: "users", // collection name to be joined
+          localField: "subscriber", // field(subscriber is ObjectId) of the current(subscription)document.
+          foreignField: "_id", // field(_id is ObjectId) in the "users" collection to match with subscriber(localField)
+          as: "subscriber", // name of the array field in the current document to store the result(localField overrides/new field)
+        },
+      },
+      {
+        $unwind: "$subscriber", // array field (subscriber) is unwound to get only _id and username
+      },
+      {
+        $group: {
+          _id: "$subscriber._id",
+          username: { $first: "$subscriber.username" },
+          email: { $first: "$subscriber.email" },
+        },
+      },
+      // {
+      //   $project: {
+      //     _id: 0,
+      //     subscriber: {
+      //       _id: 1,
+      //       username: 1,
+      //     },
+      //   },
+      // },
+    ]);
+
+    // console.log("\n subscriptions  : ", subscriptions, " : subscriptions \n");
+
+    //TODO: 3 return res
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          channelId,
+          subscribersCount: channelSubscribers.length,
+          subscriberDetails: channelSubscribers,
+        },
+        "Channel subscribers fetched successfully!!!"
+      )
+    );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error in fetching channel subscribers! ! !"
+    );
+  }
 });
 
-// controller to return channel list to which user has subscribed
-const getSubscribedChannels = asyncHandler(async (req, res) => {
-  const { subscriberId } = req.params;
-});
-
-export { toggleSubscription, getUserChannelSubscribers, getSubscribedChannels };
+export { toggleSubscription, getUserChannelSubscribers };
