@@ -145,4 +145,141 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
   }
 });
 
-export { toggleSubscription, getUserChannelSubscribers };
+const getSubscribedChannels = asyncHandler(async (req, res) => {
+  //TODO: 1 user who wants to get subscribed channels list
+  const { subscriberId } = req.params;
+
+  const userId = req.user?._id.toString();
+
+  if (!subscriberId) {
+    throw new ApiError(400, "Subscriber ID is required! ! !");
+  } else if (!isValidObjectId(subscriberId)) {
+    throw new ApiError(400, "Invalid Subscriber ID! ! !");
+  }
+
+  if (userId !== subscriberId) {
+    throw new ApiError(
+      403,
+      "You cannot view subscribed channels of others! ! !"
+    );
+  }
+
+  //TODO: 2 get subscribed channels [documents] whose subscriber field matches subscriberId -> extract channel field from that documents
+  try {
+    const subscribedChannels = await Subscription.aggregate([
+      {
+        $match: {
+          subscriber: new mongoose.Types.ObjectId(subscriberId),
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "channel", // field(channel is ObjectId) of the current(subscription)document.
+          foreignField: "_id", // field(_id is ObjectId) in the "users" collection to match with channel(localField ObjectId)
+          as: "channel", //results
+        },
+      },
+      {
+        $unwind: "$channel",
+      },
+      {
+        $group: {
+          _id: "$channel._id",
+          username: { $first: "$channel.username" },
+          email: { $first: "$channel.email" },
+        },
+      },
+      // {
+      //   $project: {
+      //     _id: 1,
+      //     channel: {
+      //       _id: 1,
+      //       username: 1,
+      //     },
+      //   },
+      // },
+    ]);
+    // console.log("\n subscriptions 2 : ", subscribedChannels, " : subscriptions 2");
+
+    //TODO: 3 return res
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          subscriberId,
+          subscribedChannelsCount: subscribedChannels.length,
+          channelDetails: subscribedChannels,
+        },
+
+        "Subscribed channels fetched successfully!!!"
+      )
+    );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error in fetching subscribed channels! ! !"
+    );
+  }
+});
+
+export { toggleSubscription, getUserChannelSubscribers, getSubscribedChannels };
+
+
+//!experimental
+// console.log(
+//   "\n-\n",
+//   await User.aggregate([
+//     {
+//       $match: {
+//         _id: new mongoose.Types.ObjectId(req.user._id),
+//       },
+//     },
+//   ]),
+//   "\n-\n"
+// );
+
+/*
+  const subscriptionsTest = await Subscription.find({
+    channel: channelId,
+  }).populate({
+    path: "subscriber",
+    select: "username email _id",
+  });
+  const subscribersArray = subscriptionsTest.map(
+    (subscription) => subscription.subscriber
+  );
+
+  const subscriptionsTest = await Subscription.find({
+  subscriber: subscriberId,
+  }).populate({
+    path: "channel",
+    select: "username email",
+  });
+  const channelsArray = subscriptionsTest.map(
+    (subscription) => subscription.channel
+  );
+*/
+
+/*
+const maxRetries = 3;
+  const retryDelay = 1000; // 1 second
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+  
+    } catch (error) {
+      if (i === maxRetries - 1) {
+        throw new ApiError(
+          500,
+          error?.message || "Error in fetching subscribers! ! !"
+        );
+      } else {
+        console.log(`Retrying in ${retryDelay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
+  */
+
+//!experimental
