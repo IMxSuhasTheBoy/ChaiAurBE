@@ -7,8 +7,10 @@ import {
   destroyFileOnCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+import { Like } from "../models/like.model.js";
+import { Comment } from "../models/comment.model.js";
 
-//TODO: Get all videos based on query, sort, pagination
+//TODO: Get all videos based on query, sort, pagination , test is to be done yet using anyones userId to fetch their videos
 const getAllVideos = asyncHandler(async (req, res) => {
   let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
 
@@ -89,11 +91,11 @@ const getAllVideos = asyncHandler(async (req, res) => {
   //TODO: 4 execute the aggregation pipeline
   try {
     const videos = await Video.aggregate(pipeline).exec();
-    console.log(videos, " : videos");
+    // console.log(videos, " : videos");
 
     if (!videos) {
       throw new ApiError(500, "Error in fetching videos! ! !");
-    }
+    } //mmore checks may require for aggregation result failure
 
     //TODO: 5
     return res
@@ -125,7 +127,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(
       400,
-      "All fields and files are required and should not be empty.! ! !"
+      "All fields and files are required and should not be empty! ! !"
     );
   }
 
@@ -159,7 +161,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
     throw new ApiError(500, "Something went wrong while uploading files! ! !");
 
-    //?Delete cloud uploaded video
+    //?✔ Delete cloud uploaded video
   }
 
   //TODO: 6 create video in DB (all required fields are ready)
@@ -295,56 +297,140 @@ const updateVideo = asyncHandler(async (req, res) => {
   }
 });
 
+//!mplement code to delete all docs of from all related video-likes✔ & comments+comment-like {when video delete success}.
+
 const deleteVideo = asyncHandler(async (req, res) => {
-  //TODO: 1
   const { videoId } = req.params;
 
   if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
   }
 
-  //TODO: 2
-  const video = await Video.findById(videoId).exec();
+  let video;
+  let outerstatusCode = null;
+  let outerErrorMsg = null;
+  try {
+    video = await Video.findById(videoId).exec();
+    if (!video) {
+      outerstatusCode = 404;
+      outerErrorMsg = "Video not found! ! !";
+      console.log(
+        outerstatusCode,
+        outerErrorMsg,
+        ": outerstatusCode outerErrorMsg 2"
+      );
+      throw new ApiError(outerstatusCode, outerErrorMsg);
+    }
 
-  console.log(video, ": video to delete");
-  if (!video) {
-    throw new ApiError(404, "Video not found! ! !");
-  }
+    if (video.videoOwner.toString() !== req.user?._id.toString()) {
+      outerstatusCode = 403;
+      outerErrorMsg = "You are not authorized to delete this video! ! !";
+      console.log(
+        outerstatusCode,
+        outerErrorMsg,
+        ": outerstatusCode outerErrorMsg 3"
+      );
+      throw new ApiError(outerstatusCode, outerErrorMsg);
+    }
 
-  //TODO: 3
-  if (video?.videoOwner.toString() !== req.user?._id.toString()) {
-    throw new ApiError(403, "You are not authorized to delete this video! ! !");
-  }
+    const oldVideo = video.videoFile;
+    const oldThumbnail = video.thumbnail;
+    const videoFolderPath = "chaiaurbe/videos/video-files/";
+    const thumbnailFolderPath = "chaiaurbe/videos/thumbnails/";
 
-  //TODO: 4
-  const oldVideo = video.videoFile;
-  const oldThumbnail = video.thumbnail;
-  const videoFolderPath = "chaiaurbe/videos/video-files/";
-  const thumbnailFolderPath = "chaiaurbe/videos/thumbnails/";
+    const isVideoDeleted = await Video.deleteOne(video._id).exec();
+    console.log(isVideoDeleted, ":✔ isVideoDeleted-)");
+    if (isVideoDeleted) {
+      try {
+        //TODO: ALL RELATED DOC DELETE OPERATIONS after video deleted will be here & !mplement tracing errors of deletions failures in try catch block
 
-  //TODO: 5
-  const destroyedVideo = await video.deleteOne().exec();
+        //TODO: delete all likes documents related to this videoId matching video field in likes document
+        const deletedVideoLikes = await Like.deleteMany({
+          video: new mongoose.Types.ObjectId(video._id),
+        }).exec();
+        console.log(deletedVideoLikes, "✔: deletedVideoLikes-");
 
-  // console.log(destroyedVideo, ": destroyedVideo"); //deleteOne() response : { acknowledged: true, deletedCount: 1 }
-  if (
-    !destroyedVideo &&
-    destroyedVideo.deletedCount === 0 &&
-    destroyedVideo.acknowledged === false
-  ) {
-    throw new ApiError(500, "failed to delete the video! ! !");
-  } else {
-    //TODO: 6
-    await destroyFileOnCloudinary(videoFolderPath, oldVideo);
+        //TODO: find all comments related to this video -> videoId matching video field in comments documents
+        const commentsArray = await Comment.find({
+          video: new mongoose.Types.ObjectId(video._id),
+        }).exec();
+        console.log(commentsArray, ":✔ commentsArray");
 
-    await destroyFileOnCloudinary(thumbnailFolderPath, oldThumbnail);
-  }
+        //TODO: delete all related like documents related to each comment document
+        const deleteOperations = commentsArray.forEach(async (element) => {
+          const deletedCommentLikes = await Like.deleteMany({
+            comment: element._id,
+          }).exec();
+          console.log(deletedCommentLikes, ":✔ deletedCommentLikes-");
 
-  //TODO: 7
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(200, destroyedVideo, "Video deleted successfully!!!")
+          //TODO: delete comments array related to this videoId
+          const deletedCommentsArrayElems = await Comment.deleteMany({
+            _id: element._id,
+          }).exec();
+          console.log(
+            deletedCommentsArrayElems,
+            ":✔ deletedCommentsArrayElems-"
+          );
+        });
+        // await Promise.all(deleteOperations); //Promise.all() : ?array of promises as an input and returns a single Promise that resolves when all of the input promises have resolved, or rejects as soon as one of the input promises rejects. It's commonly used when you have multiple asynchronous operations that can be executed concurrently and you want to wait for all of them to complete before proceeding with the next steps in your code.
+
+        // console.log(deleteOperations, ": deleteOperations");
+
+        //TODO: (already did in above map) delete comments array related to this videoId
+        // const commentsArrayElementsDeleted = await Comment.deleteMany({
+        //   video: new mongoose.Types.ObjectId(videoId),
+        // });
+
+        //TODO: destroy videoFile & thumbnail ✔
+        await destroyFileOnCloudinary(videoFolderPath, oldVideo);
+        await destroyFileOnCloudinary(thumbnailFolderPath, oldThumbnail);
+
+        //TODO: response of succesfull deletion of video doc , all video related docs & files of cloud
+        return res
+          .status(200)
+          .json(
+            new ApiResponse(
+              200,
+              isVideoDeleted,
+              "Video & related files deleted successfully!!!"
+            )
+          );
+      } catch (error) {
+        //?✔ insted throwing error for related docs deletion just keep track of it & return response? pass err.msg to response if needed?
+        console.log(
+          error?.message,
+          " : error trace of failed doc deletion in deleting related docs in deleteVideo! L ! O ! G !"
+        );
+        //TODO: response of only video doc deletion successfull. (cause maybe some or all related doc deletion failure)
+        return res
+          .status(200)
+          .json(
+            new ApiResponse(
+              200,
+              isVideoDeleted,
+              "Video deleted successfully!!!"
+            )
+          );
+      }
+    } else {
+      throw new ApiError(500, "Failed to delete the video! ! !"); //?Test who is gona throw this only error of inner if-else?
+      //purpose similar to above error handling process.exit(1);
+    }
+  } catch (error) {
+    console.log(
+      outerstatusCode,
+      outerErrorMsg,
+      ": outerstatusCode outerErrorMsg 4"
     );
+    throw new ApiError(
+      outerstatusCode === null ? 500 : outerstatusCode,
+      outerErrorMsg === null
+        ? error?.message ||
+          "Error in finding video or authenticating the videoOwner with logged in user! ! !"
+        : outerErrorMsg
+    );
+    //purpose similar to above error handling process.exit(1);
+  }
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
