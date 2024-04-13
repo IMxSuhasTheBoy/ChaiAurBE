@@ -386,17 +386,19 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
   //TODO: 1
   const avatarLocalPath = req.file?.path;
-  // console.log(avatarLocalPath, "avatarLocalPath updateUserAvatar");
 
   if (!avatarLocalPath) {
-    throw new ApiError(400, "Avatar file is missing! ! !");
+    throw new ApiError(400, "User avatar file is missing! ! !");
   }
 
   //TODO: 2
   const avatar = await uploadOnCloudinary(avatarLocalPath, "users/avatar");
 
   if (!avatar.url) {
-    throw new ApiError(400, "Something went wrong while uploading avatar! ! !");
+    throw new ApiError(
+      400,
+      "Something went wrong while uploading user avatar! ! !"
+    );
   }
 
   //TODO: 3
@@ -410,8 +412,15 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     { new: true }
   ).select("-password");
 
-  //TODO: 4.2
-  await destroyFileOnCloudinary(folderPath, oldAvatarCloudUrl);
+  //TODO: 4.2 destroy old if cloud uploaded matches with DB updated ? destroy Old : move
+  if (user.avatar === avatar.url) {
+    await destroyFileOnCloudinary(folderPath, oldAvatarCloudUrl);
+  } else {
+    throw new ApiError(
+      500,
+      "Something went wrong while updating user avatar! ! !"
+    );
+  }
 
   //TODO: 5
   return res
@@ -420,7 +429,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 });
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
-  //TODO: 4.1
+  //TODO: 4.1 old
   let coverImageOldCloudUrl = "";
   const folderPath = "chaiaurbe/users/cover-images/";
 
@@ -465,17 +474,14 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
   if (!user.coverImage === coverImage.url) {
     throw new ApiError(
       500,
-      "Something went wrong while updating cover image in database! ! !"
+      "Something went wrong while updating user cover image in database! ! !"
     );
   }
   //? will destroy call exicute only after db updation success?
 
-  //TODO: 4.2 strategy for calling destroy only if the coverImage was uploaded on registeration
-  if (coverImageOldCloudUrl !== "") {
-    const destroyResponse = await destroyFileOnCloudinary(
-      folderPath,
-      coverImageOldCloudUrl
-    );
+  //TODO: 4.2 strategy for calling destroy only if the coverImage was uploaded on registeration & cloud uploaded matches with DB updated
+  if (coverImageOldCloudUrl !== "" && user.coverImage === coverImage.url) {
+    await destroyFileOnCloudinary(folderPath, coverImageOldCloudUrl);
   }
 
   //TODO: 5
@@ -511,7 +517,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       $lookup: {
         from: "subscriptions",
         localField: "_id",
-        foreignField: "subscriber",
+        foreignField: "subscriber", //Finding : req.user._id: subscriber of / how many channels is he subscribed to
         as: "subscribedTo",
       },
     },
@@ -563,15 +569,15 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   //TODO: 1
   // console.log("getWatchHistory current user id ", typeof req.user._id),
 
-  // console.log(
-  //   await User.aggregate([
-  //     {
-  //       $match: {
-  //         _id: new mongoose.Types.ObjectId(req.user._id),
-  //       },
-  //     },
-  //   ])
-  // );
+  console.log(
+    await User.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(req.user._id),
+        },
+      },
+    ])
+  );
   const user = await User.aggregate([
     {
       $match: {
