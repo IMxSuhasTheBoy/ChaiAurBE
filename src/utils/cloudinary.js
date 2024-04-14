@@ -21,7 +21,7 @@ const uploadOnCloudinary = async (localFilePath, type) => {
       folder += "users/cover-images/";
     } else if (type === "videos/videoFile") {
       folder += "videos/video-files/";
-    } else if (type === "videos/thumbnail") {
+    } else if (type === "videos/thumbnailFile") {
       folder += "videos/thumbnails/";
     }
 
@@ -35,7 +35,11 @@ const uploadOnCloudinary = async (localFilePath, type) => {
     //*file has been uploaded successfully,
 
     // ? console.log(`File is uploaded on cloudinary! ! ! ${response.url} ! ! !`);
-    console.log("Upload cloudinary respose", response);
+    console.log(
+      "Upload cloudinary response\n",
+      response.url,
+      "\nUpload cloudinary response"
+    );
 
     //TODO: Remove the locally saved temporary file after confirming the uploaded file path with local path of file.
     fs.unlinkSync(localFilePath);
@@ -54,11 +58,8 @@ const destroyFileOnCloudinary = async (folderPath, oldFileUrl) => {
     if (!oldFileUrl) return null;
     //TODO: extract publicId from oldFileUrl
     const publicId = extractPublicId(oldFileUrl);
-    // console.log(publicId, ": publicId");
-
     const parts = publicId.split("/");
     const filename = parts[parts.length - 1];
-    // console.log(filename, ": filename");
 
     if (!publicId) return null;
 
@@ -73,15 +74,13 @@ const destroyFileOnCloudinary = async (folderPath, oldFileUrl) => {
     // const response = await cloudinary.uploader.destroy(publicId);
     //? code with additional config as per uniqueSuffix & resource type requirement
     //TODO: extract the file type * Split a string into substrings using the specified separator and return them as an array.
-    let fileType = filename.split("-")[0]; // avatar | coverImage | videoFile
+    let fileType = filename.split("-")[0]; // avatar | coverImage | videoFile | thumbnail
     fileType = fileType === "videoFile" ? "video" : "image";
-    // console.log(fileType, ": fileType");
 
     const response = await cloudinary.uploader.destroy(folderPath + filename, {
       resource_type: fileType,
       invalidate: true,
     });
-    console.log(response, "response destroy");
     //TODO: file destroy success so return the response Obj (for extracting required properties as per diff type of controller strategy);
     return response;
   } catch (error) {
@@ -98,5 +97,4 @@ export { uploadOnCloudinary, destroyFileOnCloudinary };
 // const path = "chaiaurbe/users/avatars/avatar-1712069900961-84717110";
 // const parts = path.split("/");
 // const filename = parts[parts.length - 1];
-// console.log(filename);
 //Experimental
