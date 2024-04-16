@@ -9,102 +9,132 @@ import {
 } from "../utils/cloudinary.js";
 import { Like } from "../models/like.model.js";
 import { Comment } from "../models/comment.model.js";
+import { User } from "../models/user.model.js";
+import { existsCheck } from "../utils/belongsToExists.js";
 
 //TODO: Get all videos based on query, sort, pagination , test is to be done yet using anyones userId to fetch their videos
+//? skipped for later , coudn't find a way to filter unpublished videos, cause requiremnt unclear
+//!filter unpublished
 const getAllVideos = asyncHandler(async (req, res) => {
-  let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
-
-  //TODO: 1 Parse page and limit to numbers. Base 10 (decimal): The default base if the radix is not provided. Numbers are represented using digits 0-9.
-  page = parseInt(page, 10);
-  limit = parseInt(limit, 10);
-
-  //TODO: 2 Set default values if query params are not provided
-  page = Math.max(1, page); // page should be greater than 0 //ex: page is -1, it will be set to 1 / page is 3, it will be set to 3
-  limit = Math.min(20, Math.max(1, limit)); // limit should be between 1 and 20 //ex: limit is 0, it will be set to 1 / limit is 50, it will be set to 20
-
-  const pipeline = []; //TODO: 3 - Structure pipeline based on below checks & query params
-
-  // match videos by owner userId if provided
-  if (userId) {
-    if (!isValidObjectId(userId)) {
-      throw new ApiError(400, "Invalid userId");
-    }
-
-    pipeline.push({
-      $match: {
-        videoOwner: new mongoose.Types.ObjectId(userId),
-      },
-    });
-  } //ex: [{'$match': { videoOwner: new ObjectId('660d44370718ff71f2fd8163') }},{ '$sort': { createdAt: -1 } },{ '$skip': 0 },{ '$limit': 10 }]
-
-  // match videos by query if provided
-  if (query && query.trim() !== "") {
-    pipeline.push({
-      $match: {
-        $or: [
-          { title: { $regex: query, $options: "i" } },
-          { description: { $regex: query, $options: "i" } },
-        ], //looks for substring present in title/description field of the document case-insensessive operation
-      },
-    });
-  }
-
-  // sort videos by sortBy and sortType if provided
-  const sortCriteria = {};
-  if (sortBy && sortType) {
-    sortCriteria[sortBy] = sortType === "asc" ? 1 : -1;
-    pipeline.push({
-      $sort: sortCriteria,
-    });
-  } else {
-    // default sort by createdAt in descending order
-    sortCriteria["createdAt"] = -1;
-    pipeline.push({
-      $sort: sortCriteria,
-    });
-  }
-
-  // add pagination using skip and limit
-  pipeline.push({
-    $skip: (page - 1) * limit,
-  });
-  pipeline.push({
-    $limit: limit,
-  });
-
-  // console.log("pipeline", pipeline, "pipeline");
-
-  /** // execute the aggregatePaginate pipeline returns { "statusCode": 200, "data": { "docs":[ {}, {}, {} ] }, "details":  .... }
-  Video.aggregatePaginate(pipeline)
-    .then((result) => {
-      return res
-        .status(200)
-        .json(new ApiResponse(200, result, "Videos fetched successfully!!!"));
-    })
-    .catch((error) => {
-      throw new ApiError(
-        500,
-        error?.message || "Error in fetching videos! ! !"
-      );
-    });
-  */
-  //TODO: 4 execute the aggregation pipeline
-  try {
-    const videos = await Video.aggregate(pipeline).exec();
-    // console.log(videos, " : videos");
-
-    if (!videos) {
-      throw new ApiError(500, "Error in fetching videos! ! !");
-    } //mmore checks may require for aggregation result failure
-
-    //TODO: 5
-    return res
-      .status(200)
-      .json(new ApiResponse(200, videos, "Videos fetched successfully!!!"));
-  } catch (error) {
-    throw new ApiError(500, error?.message || "Error in fetching videos! ! !");
-  }
+  //   let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+  //   console.log(userId, ": : userId");
+  //   //TODO: 1 Parse page and limit to numbers. Base 10 (decimal): The default base if the radix is not provided. Numbers are represented using digits 0-9.
+  //   page = parseInt(page, 10);
+  //   limit = parseInt(limit, 10);
+  //   //TODO: 2 Set default values if query params are not provided
+  //   page = Math.max(1, page); // page should be greater than 0 //ex: page is -1, it will be set to 1 / page is 3, it will be set to 3
+  //   limit = Math.min(20, Math.max(1, limit)); // limit should be between 1 and 20 //ex: limit is 0, it will be set to 1 / limit is 50, it will be set to 20
+  //   const options = {
+  //     page,
+  //     limit,
+  //     sort: { createdAt: -1 },
+  //   };
+  //   const pipeline = []; //TODO: 3 - Structure pipeline based on below checks & query params
+  //   // match videos by owner userId if provided
+  //   if (userId) {
+  //     if (!isValidObjectId(userId)) {
+  //       throw new ApiError(400, "Invalid userId");
+  //     }
+  //     pipeline.push({
+  //       $match: {
+  //         videoOwner: new mongoose.Types.ObjectId(userId),
+  //       },
+  //     });
+  //   } //ex: [{'$match': { videoOwner: new ObjectId('660d44370718ff71f2fd8163') }},{ '$sort': { createdAt: -1 } },{ '$skip': 0 },{ '$limit': 10 }]
+  //   // match videos by query if provided
+  //   if (query && query.trim() !== "") {
+  //     pipeline.push({
+  //       $match: {
+  //         $or: [
+  //           { title: { $regex: query, $options: "i" } },
+  //           { description: { $regex: query, $options: "i" } },
+  //         ], //looks for substring present in title/description field of the document case-insensessive operation
+  //       },
+  //     });
+  //   }
+  //   // sort videos by sortBy and sortType if provided
+  //   // const sortCriteria = {};
+  //   // if (sortBy && sortType) {
+  //   //   sortCriteria[sortBy] = sortType === "asc" ? 1 : -1;
+  //   //   pipeline.push({
+  //   //     $sort: sortCriteria,
+  //   //   });
+  //   // } else {
+  //   //   // default sort by createdAt in descending order
+  //   //   sortCriteria["createdAt"] = -1;
+  //   //   pipeline.push({
+  //   //     $sort: sortCriteria,
+  //   //   });
+  //   // }
+  //   // add pagination using skip and limit
+  //   // pipeline.push({
+  //   //   $skip: (page - 1) * limit,
+  //   // });
+  //   // pipeline.push({
+  //   //   $limit: limit,
+  //   // });
+  //   console.log("pipeline", pipeline, "pipeline");
+  //   /** // execute the aggregatePaginate pipeline returns { "statusCode": 200, "data": { "docs":[ {}, {}, {} ] }, "details":  .... }
+  //   Video.aggregatePaginate(pipeline)
+  //     .then((result) => {
+  //       return res
+  //         .status(200)
+  //         .json(new ApiResponse(200, result, "Videos fetched successfully!!!"));
+  //     })
+  //     .catch((error) => {
+  //       throw new ApiError(
+  //         500,
+  //         error?.message || "Error in fetching videos! ! !"
+  //       );
+  //     });
+  //   */
+  //   //TODO: 4 execute the aggregation pipeline
+  //   try {
+  //     // const videos = await Video.aggregatePaginate(pipeline, options);
+  //     // console.log(videos, " : videos");
+  //     const query = Video.aggregate([
+  //       {
+  //         $match: {
+  //           videoOwner: new mongoose.Types.ObjectId(userId),
+  //         },
+  //       },
+  //     ]);
+  //     const videos = await Video.aggregatePaginate(query, options);
+  //     if (!videos) {
+  //       throw new ApiError(500, "Error in fetching videos! ! !");
+  //     } //mmore checks may require for aggregation result failure
+  //     //TODO: 5
+  //     return res
+  //       .status(200)
+  //       .json(new ApiResponse(200, videos, "Videos fetched successfully!!!"));
+  //   } catch (error) {
+  //     throw new ApiError(500, error?.message || "Error in fetching videos! ! !");
+  //   }
 });
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 //TODO: Publish a video title, description, isPublished, videoFile, thumbnailFile
 const publishAVideo = asyncHandler(async (req, res) => {
@@ -225,6 +255,9 @@ const updateVideo = asyncHandler(async (req, res) => {
   // console.log(video, ": video");
 
   if (!video) {
+    //!utill for is reaally video doesnt exists check & find + delete related docs if exists
+    existsCheck(videoId, Video, "updateVideo");
+
     throw new ApiError(404, "Video not found! ! !");
   }
 
@@ -242,17 +275,21 @@ const updateVideo = asyncHandler(async (req, res) => {
   // console.log(thumbnailLocalPath, ": thumbnailLocalPath");
 
   //!Most important checks to enter or not in DB updation operation if atleast any one is provided
+  const fieldHasChanged = (value, oldValue) => {
+    return value && value.trim() !== "" && value.trim() !== oldValue;
+  };
   if (
-    (title && title.trim() !== "") ||
-    (description && description.trim() !== "") ||
+    fieldHasChanged(title, video.title) ||
+    fieldHasChanged(description, video.description) ||
     thumbnailLocalPath !== undefined
   ) {
-    console.log("~ DB & cloud video details Update Operation initated~");
-    if (title && title.trim() !== "") {
-      video.title = title;
+    // console.log("~ DB & cloud video details Update Operation initated~");
+    const isFieldNotEmpty = (field) => field && field.trim() !== "";
+    if (isFieldNotEmpty(title)) {
+      video.title = title.trim();
     }
-    if (description && description.trim() !== "") {
-      video.description = description;
+    if (isFieldNotEmpty(description)) {
+      video.description = description.trim();
     }
 
     //TODO: 4 Have old thumbnail access
@@ -276,14 +313,14 @@ const updateVideo = asyncHandler(async (req, res) => {
     }
     // console.log(thumbnail, ": thumbnail out TODO 5");
     //TODO: 6 | till Step 5 all details are set to video if provided |, now save video details in DB
-    const updatedVideo = await video.save(
+    const videoUpdated = await video.save(
       { validateBeforeSave: false },
       { new: true }
     );
-    // console.log(updatedVideo, ": TODO 6 : updatedVideo");
+    // console.log(videoUpdated, ": TODO 6 : videoUpdated");
 
     //TODO: 7 destroy old if cloud uploaded matches with DB updated ? destroy Old : move
-    if (updatedVideo?.thumbnail === thumbnail?.url) {
+    if (videoUpdated?.thumbnail === thumbnail?.url) {
       await destroyFileOnCloudinary(folderPath, oldThumbnailUrl);
     }
     //TODO: 8 return response
@@ -293,7 +330,7 @@ const updateVideo = asyncHandler(async (req, res) => {
         new ApiResponse(200, video, "Video details updated successfully!!!")
       );
   } else {
-    throw new ApiError(400, "No details provided to update! ! !");
+    throw new ApiError(400, "No details provided to update video! ! !");
   }
 });
 
@@ -312,6 +349,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
   try {
     video = await Video.findById(videoId).exec();
     if (!video) {
+      //call utill
       outerstatusCode = 404;
       outerErrorMsg = "Video not found! ! !";
       console.log(
@@ -338,9 +376,9 @@ const deleteVideo = asyncHandler(async (req, res) => {
     const videoFolderPath = "chaiaurbe/videos/video-files/";
     const thumbnailFolderPath = "chaiaurbe/videos/thumbnails/";
 
-    const isVideoDeleted = await Video.deleteOne(video._id).exec();
-    console.log(isVideoDeleted, ":✔ isVideoDeleted-)");
-    if (isVideoDeleted) {
+    const deletedVideo = await Video.deleteOne(video._id).exec();
+    console.log(deletedVideo, ":✔ deletedVideo-)");
+    if (deletedVideo) {
       try {
         //TODO: ALL RELATED DOC DELETE OPERATIONS after video deleted will be here & !mplement tracing errors of deletions failures in try catch block
 
@@ -364,13 +402,20 @@ const deleteVideo = asyncHandler(async (req, res) => {
           console.log(deletedCommentLikes, ":✔ deletedCommentLikes-");
 
           //TODO: delete comments array related to this videoId
-          const deletedCommentsArrayElems = await Comment.deleteMany({
-            _id: element._id,
-          }).exec();
-          console.log(
-            deletedCommentsArrayElems,
-            ":✔ deletedCommentsArrayElems-"
-          );
+          if (
+            (deletedCommentLikes.acknowledged &&
+              deletedCommentLikes.deletedCount === 0) ||
+            (deletedCommentLikes.acknowledged &&
+              deletedCommentLikes.deletedCount > 0)
+          ) {
+            const deletedCommentsArrayElems = await Comment.deleteMany({
+              _id: element._id,
+            }).exec();
+            console.log(
+              deletedCommentsArrayElems,
+              ":✔ deletedCommentsArrayElems-"
+            );
+          }
         });
         // await Promise.all(deleteOperations); //Promise.all() : ?array of promises as an input and returns a single Promise that resolves when all of the input promises have resolved, or rejects as soon as one of the input promises rejects. It's commonly used when you have multiple asynchronous operations that can be executed concurrently and you want to wait for all of them to complete before proceeding with the next steps in your code.
 
@@ -391,7 +436,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
           .json(
             new ApiResponse(
               200,
-              isVideoDeleted,
+              deletedVideo,
               "Video & related files deleted successfully!!!"
             )
           );
@@ -405,11 +450,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
         return res
           .status(200)
           .json(
-            new ApiResponse(
-              200,
-              isVideoDeleted,
-              "Video deleted successfully!!!"
-            )
+            new ApiResponse(200, deletedVideo, "Video deleted successfully!!!")
           );
       }
     } else {
