@@ -17,12 +17,14 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
   }
 
-  // const videoExists = await Video.exists({ _id: videoId });
-  const videoExists = await Video.findOne({ _id: videoId });
+  const videoExists = await Video.exists({ _id: videoId });
+  // const videoExists = await Video.findOne({ _id: videoId });
 
-  //!mplement : if this video was deleted using deleteVideo? make sure also all the related like docs were deleted within same del api deleteVideo
-  //? when video does not exist should we delete its related like here ? insted reling on the videocontroller to delete all the related like docs? caue thats only possibe when video ouwner deletes video using video contoller
-  //!mplement if video doesnt exist here delete video related  all likes here.
+  if (!videoExists) {
+    //call utill
+    console.log("util for validation")
+  }
+
   const errorMessage = !videoExists
     ? "Video does not exist! ! !"
     : !videoExists.isPublished
@@ -83,7 +85,8 @@ const toggleCommunityPostLike = asyncHandler(async (req, res) => {
     _id: communityPostId,
   });
   if (!communityPostExists) {
-    throw new ApiError(404, "communityPost does not exist! ! !"); //!mplement : if this post was deleted using deleteCommunityPost? make sure also all the related like docs were deleted within same del api deleteCommunityPost
+    //call utill
+    throw new ApiError(404, "communityPost not found! ! !");
   }
 
   const credentials = {
@@ -138,8 +141,11 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
   const commentExists = await Comment.exists({
     _id: commentId,
   });
+  //util for validation belongs to exists for sure if not util will delete docs related to that non existent belonging doc(ie. vid cp)
+  //ie. like belongsto exists ? belongs to belongs to exists?
   if (!commentExists) {
-    throw new ApiError(404, "Comment does not exist! ! !"); //!mplement : if this post was deleted using deleteCommunityPost? make sure also all the related like docs were deleted within same del api deleteCommunityPost
+    //call utill
+    throw new ApiError(404, "Comment does not exist! ! !");
   }
 
   const credentials = {
@@ -187,6 +193,7 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
 //? is  it required to delete video here that are found here not exists? at match stage maybe?
 const getLikedVideos = asyncHandler(async (req, res) => {
   console.log(req.user._id.toString(), "req.user._id getLikedVideos");
+  //!mplement aggregationPagination varient
   try {
     const likedVideos = await Like.aggregate([
       {
