@@ -4,13 +4,14 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { Comment } from "../models/comment.model.js";
+import { Like } from "../models/like.model.js";
 
 //TODO: create CommunityPost
 const createCommunityPost = asyncHandler(async (req, res) => {
-  const { content } = req.body;
+  let { content } = req.body;
 
   const isFieldEmpty = (field) => !field || field.trim() === "";
-
   if (isFieldEmpty(content)) {
     throw new ApiError(
       400,
@@ -19,11 +20,12 @@ const createCommunityPost = asyncHandler(async (req, res) => {
   }
 
   try {
+    content = content.trim();
     const communityPost = await CommunityPost.create({
       content: content,
       communityPostOwner: req.user?._id,
     });
-    console.log(communityPost, ": communityPost");
+    // console.log(communityPost, ": communityPost");
 
     return res
       .status(201)
@@ -42,7 +44,7 @@ const createCommunityPost = asyncHandler(async (req, res) => {
   }
 });
 
-// TODO: get user CommunityPost
+// TODO: get user CommunityPost figure out purose & output
 const getUserTweets = asyncHandler(async (req, res) => {
   const { userId } = req.query;
 
@@ -58,7 +60,6 @@ const getUserTweets = asyncHandler(async (req, res) => {
 const updateCommunityPost = asyncHandler(async (req, res) => {
   const { communityPostId } = req.params;
   // console.log(communityPostId, ": communityPostId");
-  const userId = req.user?._id;
 
   if (
     !isValidObjectId(communityPostId) ||
@@ -67,41 +68,43 @@ const updateCommunityPost = asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(400, "Invalid communityPostId or not provided! ! !");
   }
-  const isCommunityPost = await CommunityPost.findById(communityPostId).exec();
+  const communityPost = await CommunityPost.findById(communityPostId).exec();
   // console.log(communityPost, " : communityPost");
-  if (!isCommunityPost) {
+  if (!communityPost) {
     throw new ApiError(404, "Community post not found! ! !");
   }
-  if (isCommunityPost?.communityPostOwner.toString() !== userId.toString()) {
-    throw new ApiError(403, "You cannot update others posts! ! !");
-  }
-
-  const { updateContent } = req.body;
-  // console.log(updateContent, ": updateContent");
-  const isFieldEmpty = (field) => !field || field.trim() === "";
-  if (isFieldEmpty(updateContent)) {
+  if (
+    communityPost?.communityPostOwner.toString() !== req.user?._id.toString()
+  ) {
     throw new ApiError(
-      400,
-      "Update content field is required and should not be empty! ! !"
+      403,
+      "You are not authorized to update this community post! ! !"
     );
   }
 
-  //TODO: update CommunityPost
-  try {
-    // const updatedCommunityPost = await CommunityPost.findByIdAndUpdate(
-    //   communityPostId,
-    //   {
-    //     $set: { content: updateContent },
-    //   },
-    //   { new: true }
-    // );
-    isCommunityPost.content = updateContent;
+  const { newContent } = req.body;
+  // console.log(newContent, ": newContent");
+  const isFieldEmpty = (field) => !field || field.trim() === "";
+  if (isFieldEmpty(newContent)) {
+    throw new ApiError(
+      400,
+      "Update newContent field is required and should not be empty! ! !"
+    );
+  }
 
-    const updatedCommunityPost = await isCommunityPost.save(
+  if (communityPost.content !== newContent) {
+    // console.log("~ DB communityPost details Update Operation initated~");
+
+    //TODO: update CommunityPost
+    communityPost.content = newContent.trim();
+    const updatedCommunityPost = await communityPost.save(
       { validateBeforeSave: false },
       { new: true }
     );
-    console.log(updatedCommunityPost, " : updatedCommunityPost");
+    // console.log(updatedCommunityPost, " : updatedCommunityPost");
+    if (!updatedCommunityPost) {
+      throw new ApiError(500, "Failed to save updated community post! ! !");
+    }
     return res
       .status(200)
       .json(
@@ -111,15 +114,22 @@ const updateCommunityPost = asyncHandler(async (req, res) => {
           "CommunityPost updated successfully!!!"
         )
       );
-  } catch (error) {
-    throw new ApiError(500, error?.message || "Error in updating post! ! !");
+  } else {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          null,
+          "No changes in newContent provided to update community post!!!"
+        )
+      );
   }
 });
 
 const deleteCommunityPost = asyncHandler(async (req, res) => {
   const { communityPostId } = req.params;
-  // console.log(communityPostId, ": communityPostId");
-  const userId = req.user?._id;
+  console.log(communityPostId, ": communityPostId");
 
   if (
     !isValidObjectId(communityPostId) ||
@@ -130,38 +140,61 @@ const deleteCommunityPost = asyncHandler(async (req, res) => {
   }
   //TODO: 2
   const communityPost = await CommunityPost.findById(communityPostId).exec();
-  // console.log(communityPost, " : communityPost");
+  console.log(communityPost, " : communityPost");
   if (!communityPost) {
+    //util
     throw new ApiError(404, "Community post not found! ! !");
   }
-  if (communityPost?.communityPostOwner.toString() !== userId.toString()) {
-    throw new ApiError(403, "You cannot delete others posts! ! !");
+  if (
+    communityPost.communityPostOwner?.toString() !== req.user?._id.toString()
+  ) {
+    throw new ApiError(
+      403,
+      "You are not authorized to delete this community post! ! !"
+    );
   }
 
   const deletedCommunityPost = await communityPost.deleteOne().exec();
-  // if(deleteCommunityPost){} else{}
-  try {
-    console.log(deletedCommunityPost, " : deletedCommunityPost");
+  console.log(deletedCommunityPost, ": deletedCommunityPost-");
+  if (!deletedCommunityPost.acknowledged)
+    throw new ApiError(500, "Failed to delete community post! ! !");
+  //likes delete
+  const deletedCPLikes = await Like.deleteMany({
+    communityPost: new mongoose.Types.ObjectId(communityPost._id),
+  });
+  console.log(deletedCPLikes, ": deletedCPLikes-");
+  //comments find
+  const cPComments = await Comment.find({
+    communityPost: new mongoose.Types.ObjectId(communityPost._id),
+  });
+  // each comment likes & comment delete
+  const deleteOperations = cPComments.forEach(async (element) => {
+    const deletedCommentLikes = await Like.deleteMany({
+      comment: element._id,
+    });
+    console.log(deletedCommentLikes, ": deletedCommentLikes-");
 
-    //!mplement delete (communityPost-likes)
+    if (
+      (deletedCommentLikes.acknowledged &&
+        deletedCommentLikes.deletedCount === 0) ||
+      (deletedCommentLikes.acknowledged && deletedCommentLikes.deletedCount > 0)
+    ) {
+      const deletedcPCommentsElems = await Comment.deleteMany({
+        _id: element._id,
+      }).exec();
+      console.log(deletedcPCommentsElems, ": deletedcPCommentsElems-");
+    }
+  });
 
-    //!mplement delete related (comments + comment-likes) {when delete post success}
-
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          deletedCommunityPost,
-          "Community post deleted successfully!!!"
-        )
-      );
-  } catch (error) {
-    throw new ApiError(
-      500,
-      error?.message || "Error in deleting community post! ! !"
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        communityPost,
+        "Community post deleted succesfully with all related likes and comments!!!"
+      )
     );
-  }
 });
 
 export {
