@@ -2,28 +2,26 @@ import mongoose, { isValidObjectId } from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+  existsCheck,
+  isInvalidOrEmptyId,
+} from "../utils/validAndExistsCheck.js";
 
 import { Like } from "../models/like.model.js";
 import { Video } from "../models/video.model.js";
 import { CommunityPost } from "../models/communityPost.model.js";
 import { Comment } from "../models/comment.model.js";
 
-// can perform following operations when only the video exists && published: true
+// The fn either adds a new like or removes an existing like only when the video exists && published: true
 const toggleVideoLike = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-  // console.log(videoId, ": videoId toggleVideoLike");
 
-  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+  if (isInvalidOrEmptyId(videoId))
     throw new ApiError(400, "Invalid video id or not provided! ! !");
-  }
 
-  const videoExists = await Video.exists({ _id: videoId });
-  // const videoExists = await Video.findOne({ _id: videoId });
+  const videoExists = await Video.findOne({ _id: videoId });
 
-  if (!videoExists) {
-    //call utill
-    console.log("util for validation")
-  }
+  if (!videoExists) existsCheck(videoId, Video, "toggleVideoLike"); //!experimental
 
   const errorMessage = !videoExists
     ? "Video does not exist! ! !"
@@ -31,22 +29,18 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
       ? "Video is not yet published, Cannot like a video which is not published! ! !"
       : null;
 
-  if (errorMessage) {
-    throw new ApiError(404, errorMessage);
-  }
+  if (errorMessage) throw new ApiError(404, errorMessage);
 
-  // console.log(videoExists, ":: videoExists toggle like");
+  const credentials = { video: videoExists._id, likedBy: req.user?._id };
 
-  const credentials = { video: videoId, likedBy: req.user?._id };
   try {
-    const existingLike = await Like.findOneAndDelete(credentials);
+    const existingLike = await Like.findOneAndDelete(credentials); //returns null if not found
 
     if (!existingLike) {
       const newLike = await Like.create(credentials);
 
-      if (!newLike) {
+      if (!newLike)
         throw new ApiError(500, "Error in adding like to video! ! !");
-      }
 
       return res
         .status(201)
@@ -56,8 +50,8 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     }
     return res.status(200).json(
       new ApiResponse(
-        // videoExists,
-        { unlikedVideo: existingLike },
+        // { unlikedVideo: existingLike },
+        null,
         "User unliked the video successfully!!!"
       )
     );
@@ -69,39 +63,36 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
   }
 });
 
-// can delete only one like doc & only when that communityPost doc is present
+// The fn either adds a new like or removes an existing like only when the communityPost exists
 const toggleCommunityPostLike = asyncHandler(async (req, res) => {
   const { communityPostId } = req.params;
 
-  if (
-    !isValidObjectId(communityPostId) ||
-    communityPostId.trim() === "" ||
-    !communityPostId
-  ) {
-    throw new ApiError(400, "Invalid communityPost id or not provided! ! !");
-  }
+  if (isInvalidOrEmptyId(communityPostId))
+    throw new ApiError(400, "Invalid community post id or not provided! ! !");
 
-  const communityPostExists = await CommunityPost.exists({
+  const communityPostExistsId = await CommunityPost.exists({
     _id: communityPostId,
   });
-  if (!communityPostExists) {
-    //call utill
-    throw new ApiError(404, "communityPost not found! ! !");
+
+  if (!communityPostExistsId._id) {
+    //!experimental
+    existsCheck(communityPostId, CommunityPost, "toggleCommunityPostLike");
+    throw new ApiError(404, "Community post not found! ! !");
   }
 
   const credentials = {
-    communityPost: communityPostId,
+    communityPost: communityPostExistsId._id,
     likedBy: req.user?._id,
   };
+
   try {
     const existingLike = await Like.findOneAndDelete(credentials);
 
     if (!existingLike) {
       const newLike = await Like.create(credentials);
 
-      if (!newLike) {
-        throw new ApiError(500, "Error in adding like to communityPost! ! !");
-      }
+      if (!newLike)
+        throw new ApiError(500, "Error in adding like to community post! ! !");
 
       return res
         .status(201)
@@ -109,7 +100,7 @@ const toggleCommunityPostLike = asyncHandler(async (req, res) => {
           new ApiResponse(
             200,
             newLike,
-            "User liked the communityPost successfully!!!"
+            "User liked the community post successfully!!!"
           )
         );
     }
@@ -118,7 +109,7 @@ const toggleCommunityPostLike = asyncHandler(async (req, res) => {
       .json(
         new ApiResponse(
           200,
-          { unlikedCommunityPost: existingLike },
+          null,
           "User unliked the communityPost successfully!!!"
         )
       );
@@ -130,26 +121,25 @@ const toggleCommunityPostLike = asyncHandler(async (req, res) => {
   }
 });
 
-//!mplement : if this comment was deleted using controller fn? make sure also all the related like docs were deleted within same del api controller fn
+// The fn either adds a new like or removes an existing like only when the comment exists
 const toggleCommentLike = asyncHandler(async (req, res) => {
   const { commentId } = req.params;
 
-  if (!isValidObjectId(commentId) || commentId.trim() === "" || !commentId) {
-    throw new ApiError(400, "Invalid commentId id or not provided! ! !");
-  }
+  if (isInvalidOrEmptyId(commentId))
+    throw new ApiError(400, "Invalid comment id or not provided! ! !");
 
-  const commentExists = await Comment.exists({
+  const commentExistsId = await Comment.exists({
     _id: commentId,
   });
-  //util for validation belongs to exists for sure if not util will delete docs related to that non existent belonging doc(ie. vid cp)
-  //ie. like belongsto exists ? belongs to belongs to exists?
-  if (!commentExists) {
-    //call utill
+
+  if (!commentExistsId._id) {
+    //!experimental
+    existsCheck(commentId, Comment, "toggleCommentLike");
     throw new ApiError(404, "Comment does not exist! ! !");
   }
 
   const credentials = {
-    comment: commentId,
+    comment: commentExistsId._id,
     likedBy: req.user?._id,
   };
   try {
@@ -158,9 +148,8 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
     if (!existingLike) {
       const newLike = await Like.create(credentials);
 
-      if (!newLike) {
+      if (!newLike)
         throw new ApiError(500, "Error in adding like to comment! ! !");
-      }
 
       return res
         .status(201)
@@ -175,11 +164,7 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
     return res
       .status(200)
       .json(
-        new ApiResponse(
-          200,
-          { unlikedComment: existingLike },
-          "User unliked the comment successfully!!!"
-        )
+        new ApiResponse(200, null, "User unliked the comment successfully!!!")
       );
   } catch (error) {
     throw new ApiError(
