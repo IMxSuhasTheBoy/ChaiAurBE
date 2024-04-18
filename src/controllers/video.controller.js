@@ -1,5 +1,4 @@
 import mongoose, { isValidObjectId } from "mongoose";
-import { Video } from "../models/video.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -7,10 +6,14 @@ import {
   destroyFileOnCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+import {
+  existsCheck,
+  isInvalidOrEmptyId,
+} from "../utils/validAndExistsCheck.js";
+
+import { Video } from "../models/video.model.js";
 import { Like } from "../models/like.model.js";
 import { Comment } from "../models/comment.model.js";
-import { User } from "../models/user.model.js";
-import { existsCheck } from "../utils/belongsToExists.js";
 
 //TODO: Get all videos based on query, sort, pagination , test is to be done yet using anyones userId to fetch their videos
 //? skipped for later , coudn't find a way to filter unpublished videos, cause requiremnt unclear
@@ -134,49 +137,46 @@ const getAllVideos = asyncHandler(async (req, res) => {
 //
 //
 //
-//
 
-//TODO: Publish a video title, description, isPublished, videoFile, thumbnailFile
+//TODO: This fn creates a video - with title, description, videoFile, thumbnailFile, isPublished*
 const publishAVideo = asyncHandler(async (req, res) => {
   //TODO✔ if any of videoFile or thumbnailFile is failed to upload cloud, throw error / delete cloud files of uploaded one of it
-  //TODO: 1
   const { title, description, isPublished = true } = req.body;
   // console.log("\n",req.files,"\n"," : req.files 1","\n",title,"\n",description,"\n",isPublished," : req.body" "\n");
-  //TODO: 2
   const videoFileLocalPath = req.files?.videoFile?.[0].path;
   const thumbnailFileLocalPath = req.files?.thumbnail?.[0].path;
-  // console.log("\n",videoFileLocalPath,"\n",thumbnailFileLocalPath," : paths 2 \n");
+  // console.log("\n",videoFileLocalPath,"\n",thumbnailFileLocalPath," : file paths \n");
 
-  //made fn to check is string/property type string empty ?
+  //TODO: 1 check title, description & files local path saved by middleware
   const isFieldEmpty = (field) => !field || field.trim() === "";
+
   if (
     isFieldEmpty(title) ||
     isFieldEmpty(description) ||
     isFieldEmpty(videoFileLocalPath) ||
     isFieldEmpty(thumbnailFileLocalPath)
-  ) {
+  )
     throw new ApiError(
       400,
       "All fields and files are required and should not be empty! ! !"
     );
-  }
 
-  //TODO: 3 Files upload on cloud operations (all required fields are ready)
+  //TODO: 2 Files upload on cloud operations (all required fields are ready)
   const videoFile = await uploadOnCloudinary(
     videoFileLocalPath,
     "videos/videoFile"
   );
 
   //!Test videoFile = null;
-  //TODO: 4 try thumbnail cloud upload after succesfull video upload
+  //TODO: 3 try uploading thumbnail on cloud after video upload success
   let thumbnailFile = undefined;
-  if (!videoFile && isFieldEmpty(videoFile?.url)) {
+  if (!videoFile || isFieldEmpty(videoFile?.url)) {
     throw new ApiError(
       500,
       "Something went wrong while uploading videoFile! ! !"
     );
   } else {
-    // console.log("video upload successfully try thumbnail upload!!!");
+    // console.log("video uploaded successfully try thumbnail upload!!!");
     thumbnailFile = await uploadOnCloudinary(
       thumbnailFileLocalPath,
       "videos/thumbnailFile"
@@ -184,7 +184,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   } //TODO? make thumbnail upload operation repeats/retries itself till succeedes || some tries, if userr cancels process give below error*
 
   //!Test thumbnailFile = "";
-  //TODO: 5 thumbnailFile failed to upload on cloud ? then destroy Uploaded cloud videoFile & throw error : move
+  //TODO: 4 thumbnailFile failed to upload on cloud ? then destroy Uploaded cloud videoFile & throw error : move
   if (thumbnailFile === undefined || isFieldEmpty(thumbnailFile?.url)) {
     const videoFolderPath = "chaiaurbe/videos/video-files/";
     await destroyFileOnCloudinary(videoFolderPath, videoFile.url);
@@ -194,7 +194,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
     //?✔ Delete cloud uploaded video
   }
 
-  //TODO: 6 create video in DB (all required fields are ready)
+  //TODO: 5 create video (all required fields are ready)
   try {
     const video = await Video.create({
       title,
@@ -205,7 +205,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
       videoOwner: req.user?._id,
       isPublished,
     });
-    //TODO: 7 return response with created document
+
     return res
       .status(201)
       .json(new ApiResponse(200, video, "Video published successfully!!!"));
@@ -214,89 +214,83 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 });
 
+//TODO: fetch video : usage unclear //? checks of this fn should be according to purpose of this fn(clearly defined later maybe), OR WEB-APP may require another similar fn for another similar access control
 const getVideoById = asyncHandler(async (req, res) => {
-  //TODO: 1 //? checks of this fn should be according to purpose of this fn(clearly defined later maybe), OR WEB-APP may require another similar fn for another similar access control
   const { videoId } = req.params;
-  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+
+  //TODO: 1 check videoId
+  if (isInvalidOrEmptyId(videoId)) {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
   }
 
-  //TODO: 2
-  try {
-    const video = await Video.findById(videoId).exec();
-
-    if (
-      !video ||
-      (!video?.isPublished &&
-        video?.videoOwner.toString() !== req.user?._id.toString()) //!Need to make changes as per strategy requirements, this strategy is for loggedin users having access to his videos
-    ) {
-      throw new ApiError(404, "Video not found! ! !");
-    }
-
-    //TODO: 3
-    return res
-      .status(200)
-      .json(new ApiResponse(200, video, "Video fetched successfully!!!"));
-  } catch (error) {
-    throw new ApiError(500, error?.message || "Error fetching the video! ! !");
-  }
-});
-
-//TODO: update video details title, description, thumbnail if atleast any one from it provided
-const updateVideo = asyncHandler(async (req, res) => {
-  //TODO: 1
-  const { videoId } = req.params;
-
-  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
-    throw new ApiError(400, "Invalid video id or not provided! ! !");
-  }
-
+  // try {
+  //TODO: 2 find video
   const video = await Video.findById(videoId).exec();
-  // console.log(video, ": video");
 
-  if (!video) {
-    //!utill for is reaally video doesnt exists check & find + delete related docs if exists
-    existsCheck(videoId, Video, "updateVideo");
-
+  if (
+    !video ||
+    (!video?.isPublished &&
+      video?.videoOwner.toString() !== req.user?._id.toString()) //!Need to make changes as per strategy requirements, this strategy is for loggedin users having access to his videos
+  ) {
     throw new ApiError(404, "Video not found! ! !");
   }
 
-  //TODO: 2 check if the user is the owner of the video
-  if (video?.videoOwner.toString() !== req.user?._id.toString()) {
+  return res
+    .status(200)
+    .json(new ApiResponse(200, video, "Video fetched successfully!!!"));
+  // } catch (error) {
+  //   throw new ApiError(500, error?.message || "Error fetching the video! ! !");
+  // }
+});
+
+//TODO: This fn updates video details title, description, thumbnail if atleast any one from it provided (only video owner can update details)
+const updateVideo = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  //TODO: 1 check videoId
+  if (isInvalidOrEmptyId(videoId))
+    throw new ApiError(400, "Invalid video id or not provided! ! !");
+
+  //TODO: 2 find video
+  const video = await Video.findById(videoId).exec();
+
+  if (!video) {
+    existsCheck(videoId, Video, "updateVideo"); //!experimental
+    throw new ApiError(404, "Video not found! ! !");
+  }
+
+  //TODO: 3 check if the user is the owner of the video
+  if (video?.videoOwner.toString() !== req.user?._id.toString())
     throw new ApiError(
       403,
       "You are not authorized to update details of this video! ! !"
     );
-  }
+
   //? try catch block not worked for my logic
-  //TODO: 3 set new details to video & thumbnail if provided
   const { title, description } = req.body;
   const thumbnailLocalPath = req.file?.path; //undefined if not provided
-  // console.log(thumbnailLocalPath, ": thumbnailLocalPath");
 
   //!Most important checks to enter or not in DB updation operation if atleast any one is provided
-  const fieldHasChanged = (value, oldValue) => {
-    return value && value.trim() !== "" && value.trim() !== oldValue;
-  };
+  //TODO: 4 check provided new details
   if (
-    fieldHasChanged(title, video.title) ||
-    fieldHasChanged(description, video.description) ||
+    (title && title.trim() !== "" && title.trim() !== video.title) ||
+    (description &&
+      description.trim() !== "" &&
+      description.trim() !== video.description) ||
     thumbnailLocalPath !== undefined
   ) {
     // console.log("~ DB & cloud video details Update Operation initated~");
-    const isFieldNotEmpty = (field) => field && field.trim() !== "";
-    if (isFieldNotEmpty(title)) {
-      video.title = title.trim();
-    }
-    if (isFieldNotEmpty(description)) {
-      video.description = description.trim();
-    }
 
-    //TODO: 4 Have old thumbnail access
+    if (title && title.trim() !== "") video.title = title.trim();
+
+    if (description && description.trim() !== "")
+      video.description = description.trim();
+
+    //TODO: 4 Have old thumbnail access for 7
     const oldThumbnailUrl = video.thumbnail;
     const folderPath = "chaiaurbe/videos/thumbnails/";
 
-    //TODO: 5 Upload new thumbnail if provided ? assign it  : error
+    //TODO: 5 Upload new thumbnail if provided ? assign it : error
     let thumbnail = undefined; //will be new thumbnail if upload success remains else undefined
     if (thumbnailLocalPath !== undefined) {
       thumbnail = await uploadOnCloudinary(
@@ -305,7 +299,7 @@ const updateVideo = asyncHandler(async (req, res) => {
       );
       // console.log(thumbnail, ": thumbnail in TODO 5");
 
-      if (!thumbnail.url && thumbnail.url === "") {
+      if (!thumbnail.url || thumbnail.url === "") {
         throw new ApiError(500, "Error in uploading thumbnail! ! !"); ///! try givivng error then decide for eeeror handling
       } else {
         video.thumbnail = thumbnail.url;
@@ -319,11 +313,10 @@ const updateVideo = asyncHandler(async (req, res) => {
     );
     // console.log(videoUpdated, ": TODO 6 : videoUpdated");
 
-    //TODO: 7 destroy old if cloud uploaded matches with DB updated ? destroy Old : move
-    if (videoUpdated?.thumbnail === thumbnail?.url) {
+    //TODO: 6 destroy old if cloud uploaded matches with DB updated ? destroy Old : move
+    if (videoUpdated?.thumbnail === thumbnail?.url)
       await destroyFileOnCloudinary(folderPath, oldThumbnailUrl);
-    }
-    //TODO: 8 return response
+
     return res
       .status(200)
       .json(
@@ -334,74 +327,77 @@ const updateVideo = asyncHandler(async (req, res) => {
   }
 });
 
-//!mplement code to delete all docs of from all related video-likes✔ & comments+comment-like {when video delete success}.
-
+//TODO: This fn deletes all docs related to requested video when requested video deletes successfully in this function by video owner
 const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
-  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+  //TODO: 1 check videoId
+  if (isInvalidOrEmptyId(videoId))
     throw new ApiError(400, "Invalid video id or not provided! ! !");
-  }
 
-  let video;
+  let videoExists;
   let outerstatusCode = null;
   let outerErrorMsg = null;
   try {
-    video = await Video.findById(videoId).exec();
-    if (!video) {
-      //call utill
+    // TODO: 2 find video ? next check 3 : pass error to catch
+    videoExists = await Video.findById(videoId).exec();
+    if (!videoExists) {
+      existsCheck(videoId, Video, "deleteVideo"); //!experimental
       outerstatusCode = 404;
       outerErrorMsg = "Video not found! ! !";
-      console.log(
-        outerstatusCode,
-        outerErrorMsg,
-        ": outerstatusCode outerErrorMsg 2"
-      );
+      // console.log(
+      //   outerstatusCode,
+      //   outerErrorMsg,
+      //   ": outerstatusCode outerErrorMsg 2"
+      // );
       throw new ApiError(outerstatusCode, outerErrorMsg);
     }
 
-    if (video.videoOwner.toString() !== req.user?._id.toString()) {
+    //TODO: 3 check if the user is the owner of the video ? proceed delete : error
+    if (videoExists.videoOwner.toString() !== req.user?._id.toString()) {
       outerstatusCode = 403;
       outerErrorMsg = "You are not authorized to delete this video! ! !";
-      console.log(
-        outerstatusCode,
-        outerErrorMsg,
-        ": outerstatusCode outerErrorMsg 3"
-      );
+      // console.log(
+      //   outerstatusCode,
+      //   outerErrorMsg,
+      //   ": outerstatusCode outerErrorMsg 3"
+      // );
       throw new ApiError(outerstatusCode, outerErrorMsg);
     }
 
-    const oldVideo = video.videoFile;
-    const oldThumbnail = video.thumbnail;
+    //TODO: 4 have old video files access for 7
+    const oldVideo = videoExists.videoFile;
+    const oldThumbnail = videoExists.thumbnail;
     const videoFolderPath = "chaiaurbe/videos/video-files/";
     const thumbnailFolderPath = "chaiaurbe/videos/thumbnails/";
 
-    const deletedVideo = await Video.deleteOne(video._id).exec();
+    //TODO: 5 delete video
+    const deletedVideo = await Video.deleteOne(videoExists._id).exec();
     console.log(deletedVideo, ":✔ deletedVideo-)");
+
+    //TODO: 6 video deleted ? delete related docs : pass error to catch
     if (deletedVideo) {
       try {
-        //TODO: ALL RELATED DOC DELETE OPERATIONS after video deleted will be here & !mplement tracing errors of deletions failures in try catch block
-
-        //TODO: delete all likes documents related to this videoId matching video field in likes document
+        //6.1 delete all likes docs related to this video -> video field of likes document
         const deletedVideoLikes = await Like.deleteMany({
-          video: new mongoose.Types.ObjectId(video._id),
+          video: new mongoose.Types.ObjectId(videoExists._id),
         }).exec();
         console.log(deletedVideoLikes, "✔: deletedVideoLikes-");
 
-        //TODO: find all comments related to this video -> videoId matching video field in comments documents
+        //6.2 find all comments docs related to this video ->  video field of comments documents
         const commentsArray = await Comment.find({
-          video: new mongoose.Types.ObjectId(video._id),
+          video: new mongoose.Types.ObjectId(videoExists._id),
         }).exec();
         console.log(commentsArray, ":✔ commentsArray");
 
-        //TODO: delete all related like documents related to each comment document
         const deleteOperations = commentsArray.forEach(async (element) => {
+          //6.3 delete all related like docs related to each comment doc -> comment field of like documents
           const deletedCommentLikes = await Like.deleteMany({
             comment: element._id,
           }).exec();
           console.log(deletedCommentLikes, ":✔ deletedCommentLikes-");
 
-          //TODO: delete comments array related to this videoId
+          //6.4 delete comments array -> if 6.2 && each comment likes delete success
           if (
             (deletedCommentLikes.acknowledged &&
               deletedCommentLikes.deletedCount === 0) ||
@@ -418,40 +414,30 @@ const deleteVideo = asyncHandler(async (req, res) => {
           }
         });
         // await Promise.all(deleteOperations); //Promise.all() : ?array of promises as an input and returns a single Promise that resolves when all of the input promises have resolved, or rejects as soon as one of the input promises rejects. It's commonly used when you have multiple asynchronous operations that can be executed concurrently and you want to wait for all of them to complete before proceeding with the next steps in your code.
-
-        // console.log(deleteOperations, ": deleteOperations");
-
-        //TODO: (already did in above map) delete comments array related to this videoId
-        // const commentsArrayElementsDeleted = await Comment.deleteMany({
-        //   video: new mongoose.Types.ObjectId(videoId),
-        // });
-
-        //TODO: destroy videoFile & thumbnail ✔
+        //TODO: 7 destroy old videoFile & thumbnail ✔
         await destroyFileOnCloudinary(videoFolderPath, oldVideo);
         await destroyFileOnCloudinary(thumbnailFolderPath, oldThumbnail);
 
-        //TODO: response of succesfull deletion of video doc , all video related docs & files of cloud
+        //TODO: 8 response of succesfull deletion of requested video doc & all related docs & files from cloud
         return res
           .status(200)
           .json(
             new ApiResponse(
               200,
-              deletedVideo,
+              null,
               "Video & related files deleted successfully!!!"
             )
           );
       } catch (error) {
-        //?✔ insted throwing error for related docs deletion just keep track of it & return response? pass err.msg to response if needed?
+        //?✔ if required : insted throwing error for related docs deletion just keep track of it & return response? pass err.msg to response if needed?
         console.log(
           error?.message,
           " : error trace of failed doc deletion in deleting related docs in deleteVideo! L ! O ! G !"
         );
-        //TODO: response of only video doc deletion successfull. (cause maybe some or all related doc deletion failure)
+        //TODO: 9 response of only requested video doc deletion successfull, (cause maybe some or all related doc deletion failure)
         return res
           .status(200)
-          .json(
-            new ApiResponse(200, deletedVideo, "Video deleted successfully!!!")
-          );
+          .json(new ApiResponse(200, null, "Video deleted successfully!!!"));
       }
     } else {
       throw new ApiError(500, "Failed to delete the video! ! !"); //?Test who is gona throw this only error of inner if-else?
@@ -474,43 +460,47 @@ const deleteVideo = asyncHandler(async (req, res) => {
   }
 });
 
+//TODO: This fn toggles the publish status of the video by video owner
 const togglePublishStatus = asyncHandler(async (req, res) => {
-  //TODO: 1
   const { videoId } = req.params;
 
-  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+  //TODO: 1 check videoId
+  if (isInvalidOrEmptyId(videoId))
     throw new ApiError(400, "Invalid video id or not provided! ! !");
+
+  //TODO: 2 find video
+  const videoExists = await Video.findById(videoId)
+    .select("videoOwner isPublished")
+    .exec();
+
+  if (!videoExists) {
+    existsCheck(videoId, Video, "togglePublishStatus"); //!experimental
+    throw new ApiError(404, "Video not found! ! !");
   }
 
+  //TODO: 3 check if the user is the owner of the video
+  if (videoExists.videoOwner.toString() !== req.user?._id.toString())
+    throw new ApiError(
+      403,
+      "You are not authorized to update status of this video! ! !"
+    );
+
   try {
-    //TODO: 2
-    const video = await Video.findById(videoId)
-      .select("videoOwner isPublished")
-      .exec();
+    //TODO: 4 update video publish status
+    videoExists.isPublished = !videoExists.isPublished;
 
-    if (!video) {
-      throw new ApiError(404, "Video not found! ! !");
-    }
+    //TODO: 5 save video ? respond success : error to catch
+    const videoExistsSave = await videoExists.save();
 
-    // check if the user is the owner of the video
-    if (video?.videoOwner.toString() !== req.user?._id.toString()) {
-      throw new ApiError(
-        403,
-        "You are not authorized to update status of this video! ! !"
-      );
-    }
+    if (!videoExistsSave)
+      throw new ApiError(500, "Error in updating video publish status! ! !");
 
-    //TODO: 3
-    video.isPublished = !video.isPublished;
-
-    await video.save();
-    //TODO: 4
     res
       .status(200)
       .json(
         new ApiResponse(
           200,
-          video,
+          videoExists,
           "Video publish status updated successfully!!!"
         )
       );
@@ -521,10 +511,11 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     );
   }
 });
+
 export {
   getAllVideos,
-  publishAVideo,
   getVideoById,
+  publishAVideo,
   updateVideo,
   deleteVideo,
   togglePublishStatus,
