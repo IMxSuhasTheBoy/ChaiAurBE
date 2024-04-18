@@ -1,44 +1,54 @@
 import mongoose, { isValidObjectId } from "mongoose";
-import { User } from "../models/user.model.js";
-import { Subscription } from "../models/subscription.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
+import { Subscription } from "../models/subscription.model.js";
+import {
+  existsCheck,
+  isInvalidOrEmptyId,
+} from "../utils/validAndExistsCheck.js";
+import { User } from "../models/user.model.js";
+
 //? allow subscription feature only if any(his) video have videoOwner field of that user, So that user as channel,( by adding a isChannel boolean field in User model using aggrigation addField )
 //? have another similar access control with a createChannel fn for user to create a channel & allow feature of subscription
+
+//TODO: The fn adds a new subscription doc or removes an existing subscription by the logged in user
 const toggleSubscription = asyncHandler(async (req, res) => {
-  //TODO: 1 get channelId whose user wants to toggle subscription.
   const { channelId } = req.params;
 
-  if (!channelId) {
-    throw new ApiError(400, "Channel ID is required! ! !");
-  } else if (!isValidObjectId(channelId)) {
-    throw new ApiError(400, "Invalid Channel ID! ! !");
+  //TODO: 1 check channelId
+  if (isInvalidOrEmptyId(channelId))
+    throw new ApiError(400, "Invalid Channel Id or not provided! ! !");
+
+  const userchannelExistsId = await User.exists({
+    _id: channelId,
+  });
+
+  if (!userchannelExistsId._id) {
+    existsCheck(channelId, User, "toggleSubscription"); //!experimental
+    throw new ApiError(404, "Channel not found! ! !");
   }
 
   //TODO: 2 logged in user is trying to subscribe to himself ? error : move
-  const userId = req.user?._id;
-
-  if (userId.toString() === channelId) {
+  if (req.user?._id === mongoose.Types.ObjectId(channelId))
     throw new ApiError(403, "You cannot subscribe to your channel! ! !");
-  }
+  ///!test
 
-  const credentials = { subscriber: userId, channel: channelId };
+  const credentials = { subscriber: req.user?._id, channel: channelId };
 
-  //TODO: 3 if userId already subscribed to this channelId It will be deleted ? return response with 200 : add subscription document
+  //TODO: 3 if logged in req.user already subscribed to this channelId It will be deleted ? return response with 200 : add subscription document
   try {
-    //CASE (subcription returns document):  doc exists- doc will be deleted
     //CASE (subcription returns null):  doc does not exist- new subscription doc will be created
     const subscriptionExists = await Subscription.findOneAndDelete(credentials);
+    //CASE (subcription returns document):  doc exists- doc will be deleted
     // console.log("subscription : ", subscriptionExists, ": subscription");
 
     if (!subscriptionExists) {
       const newSubscription = await Subscription.create(credentials);
 
-      if (!newSubscription) {
+      if (!newSubscription)
         throw new ApiError(500, "Error in adding subscription! ! !");
-      }
 
       return res
         .status(201)
@@ -224,7 +234,6 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
 });
 
 export { toggleSubscription, getUserChannelSubscribers, getSubscribedChannels };
-
 
 //!experimental
 // console.log(
