@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import fs from "fs";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -39,7 +40,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
   }
 };
 
-//TODO: The fn creates new user document
+//TODO: The fn creates new user document, (the locally stored files are kept for uploading when registering user fails due to conflict error, for case of retry upload), (user email & fullname conflicts while registering,  so only unique email & fullname combination is allowed per user)
 const registerUser = asyncHandler(async (req, res) => {
   /* test res.status(200).json({
     message: "Chai Aur Code",
@@ -51,13 +52,23 @@ const registerUser = asyncHandler(async (req, res) => {
 
   //TODO: 2 check for empty & valid fields
   if (
-    [fullName, email, username, password].some((field) => field?.trim() === "")
+    [fullName, email, username, password].some(
+      (field) => field?.trim() === "" || !field
+    )
   )
     throw new ApiError(400, "All fields are required! ! !");
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!email.match(emailRegex))
     throw new ApiError(400, "Invalid email address! ! !");
+
+  const usernameRegex = /^.{1,12}$/;
+  if (!username.match(usernameRegex))
+    throw new ApiError(400, "Invalid username! ! !");
+
+  const fullNameRegex = /^(?:[A-Za-z]+\s?){1,3}[A-Za-z]+$/;
+  if (!fullName.match(fullNameRegex))
+    throw new ApiError(400, "Invalid full name! ! !");
 
   const passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}$/;
   if (!passwordRegex.test(password))
@@ -71,8 +82,11 @@ const registerUser = asyncHandler(async (req, res) => {
     $or: [{ username }, { email }],
   });
 
-  if (existedUser)
+  if (existedUser) {
+    // fs.unlinkSync(req.files.avatar[0].path); //!test
+    // fs.unlinkSync(req.files.coverImage[0].path); //!test for in case dont need to keep local files
     throw new ApiError(409, "User with email or username already exists! ! !");
+  }
 
   // console.log("registerUser TODO: 4", req.files);
   //TODO: 4.1 check for files
@@ -81,7 +95,7 @@ const registerUser = asyncHandler(async (req, res) => {
   // const coverImageLocalPath = req.files?.coverImage[0]?.path;
 
   //*above edge case covered
-  let coverImageLocalPath;
+  let coverImageLocalPath = null;
   if (
     req.files &&
     Array.isArray(req.files.coverImage) &&
@@ -100,10 +114,13 @@ const registerUser = asyncHandler(async (req, res) => {
   //TODO: 4.3 upload files & check for success
   const avatar = await uploadOnCloudinary(avatarLocalPath, "users/avatar");
 
-  const coverImage = await uploadOnCloudinary(
-    coverImageLocalPath,
-    "users/coverImage"
-  );
+  let coverImage = null;
+  if (coverImageLocalPath) {
+    coverImage = await uploadOnCloudinary(
+      coverImageLocalPath,
+      "users/coverImage"
+    );
+  }
   // console.log("TODO: 4.3", avatar, coverImage);
 
   //TODO: 4.4
@@ -128,7 +145,6 @@ const registerUser = asyncHandler(async (req, res) => {
   const createdUser = await User.findById(user._id).select(
     "-password -refreshToken"
   );
-  //? at the moment of user creation refreshToken isn't need to create?
 
   //TODO: 7.1 check for success
   if (!createdUser)
@@ -143,29 +159,23 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, createdUser, "User registered successfully!!!"));
 });
 
-//TODO: The fn logins user with requested credentials
+//TODO: The fn logins user with requested credentials (generates tokens, sets cookies)
 const loginUser = asyncHandler(async (req, res) => {
   //TODO: 1 take fields
   const { email, username, password } = req.body;
 
-  //TODO: 2 check for empty & valid fields
-  const isFieldEmpty = (field) => !field || field.trim() === "";
-
-  if (isFieldEmpty(username) && isFieldEmpty(email))
-    throw new ApiError(
-      400,
-      "Username and Email is reqired and should not be empty! ! !"
-    );
+  //TODO: 2 check for empty & valid fields //validation of syntax for email must be on frontend
+  if ([email, username].some((field) => field?.trim() === "" || !field))
+    throw new ApiError(400, "Please provide username and email! ! !");
   // Here is an alternative of above code based on logic :
   // if (!(username || email))
   //     throw new ApiError(400, "username or email is required")
 
   //TODO: 3 check for existing user
-  const user = await User.findOne({
-    $or: [{ username }, { email }],
-  });
-  //? Here is an alternative of above code based on logic : what if an registered email is associated with more than 1 username/vise versa ?
-  // const user = await User.findOne({ username, email });
+  const user = await User.findOne({ username, email });
+  // const user = await User.findOne({
+  //   $or: [{ username }, { email }],
+  // });
 
   if (!user) throw new ApiError(404, "User does not exist! ! !");
 
@@ -188,7 +198,7 @@ const loginUser = asyncHandler(async (req, res) => {
       "-password -refreshToken"
     );
 
-    //console.log("loggedInUser", loggedInUser);
+    //console.log("loggedInUser : ", loggedInUser);
 
     //console.log(".env file options", process.env.HTTP_ONLY === "true"); //*For both true and false boolean values in .env, It will be treated as a string and when compared to 'true', it will evaluate to false/true respectively for both true and false values.
 
@@ -214,16 +224,13 @@ const loginUser = asyncHandler(async (req, res) => {
         )
       );
   } catch (error) {
-    throw new ApiError(500, error?.message || "Failed to logging in user! ! !");
+    throw new ApiError(500, error?.message || "Failed to log in user! ! !");
   }
   //!sending accessToken and refreshToken in json response (data). Should be as per strategy requirement
 });
 
-//TODO: The fn logs out the currently logged in user
+//TODO: The fn logs out the currently logged in user (clears cookies, user refresh token)
 const logoutUser = asyncHandler(async (req, res) => {
-  //console.log("logoutUser verifiedJWT", req.user._id);
-  // console.log("logout", req, "logout");
-
   //TODO: 2.1 2.2 find and remove field refreshToken from user document
   await User.findByIdAndUpdate(
     req.user?._id,
@@ -273,7 +280,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     if (!user) throw new ApiError("Invalid refresh Token! ! !");
 
     //TODO: 4 verify refresh token
-    if (incommingRefreshToken !== user?.refreshToken)
+    if (incommingRefreshToken !== user.refreshToken)
       throw new ApiError(401, "Refresh token is expired or used! ! !");
 
     //TODO: 5 generate new tokens & save refresh token in user document
@@ -286,7 +293,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       user._id
     );
 
-    //TODO: 6
+    //TODO: 6 set cookies
     return res
       .status(200)
       .cookie("accessToken", accessToken, options)
@@ -305,9 +312,17 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
 //TODO: The fn changes password of currently logged in user
 const changeCurrentPassword = asyncHandler(async (req, res) => {
-  //TODO: 1 take fields
+  //TODO: 1 take & check fields
   const { oldPassword, newPassword } = req.body;
   // console.log(oldPassword, newPassword);
+
+  if (
+    [oldPassword, newPassword].some((field) => field?.trim() === "" || !field)
+  )
+    throw new ApiError(
+      400,
+      "Please provide old password and new password! ! !"
+    );
 
   //TODO: 2 check for empty & valid fields
   const passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}$/;
@@ -346,31 +361,57 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, req.user, "User found successfully!!!"));
 });
 
-//TODO: The fn updates user details with provided fields
+//TODO: The fn updates user details with atleast any of the fullname, email provided fields !mplement otp validation
 const updateAccountDetails = asyncHandler(async (req, res) => {
   //TODO: 1 take fields
   const { fullName, email } = req.body;
-  // console.log("updateAccountDetails", fullName, email);
+  console.log("updateAccountDetails", fullName, email);
 
-  //TODO: 2 check fields
-  if (!fullName || fullName.trim() === "" || !email || email.trim() === "")
-    throw new ApiError(400, "Please provide full name and email! ! !");
+  const user = await User.findById(req.user?._id).select("-password");
+  console.log(user, " updateAccountDetails user");
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email.match(emailRegex))
-    throw new ApiError(400, "Invalid email address! ! !");
+  //TODO: 2 check is atleast one field provided
+  if (!fullName && !email) {
+    throw new ApiError(
+      400,
+      "Please provide atleast one of the email or fullName field! ! !"
+    );
+  }
 
-  //TODO: 3 find & update user
-  const user = await User.findByIdAndUpdate(
-    req.user?._id,
-    {
-      $set: {
-        fullName,
-        email,
-      },
-    },
-    { new: true }
-  ).select("-password");
+  //TODO: 3 new field differs from old field ? (valid ? save : error) : move
+  if (fullName && fullName !== user.fullName) {
+    const fullNameRegex = /^(?:[A-Za-z]+\s?){1,3}[A-Za-z]+$/;
+
+    if (fullNameRegex.test(fullName)) {
+      user.fullName = fullName;
+    } else {
+      throw new ApiError(400, "Invalid full name! ! !");
+    }
+  }
+
+  if (email && email !== user.email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (emailRegex.test(email)) {
+      user.email = email;
+    } else {
+      throw new ApiError(400, "Invalid email address! ! !");
+    }
+  }
+
+  user.save({ validateBeforeSave: false });
+
+  //TODO: 3 find & update user, without validations & additional checks, alternatively
+  // const user = await User.findByIdAndUpdate(
+  //   req.user?._id,
+  //   {
+  //     $set: {
+  //       fullName,
+  //       email,
+  //     },
+  //   },
+  //   { new: true }
+  // ).select("-password");
 
   //TODO: 4
   return res
