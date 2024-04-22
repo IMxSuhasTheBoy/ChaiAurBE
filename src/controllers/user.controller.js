@@ -59,16 +59,25 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "All fields are required! ! !");
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email.match(emailRegex))
-    throw new ApiError(400, "Invalid email address! ! !");
+  if (!emailRegex.test(email))
+    throw new ApiError(
+      400,
+      "Email does not meet the criteria. Please use a email address with a valid domain! ! !"
+    );
 
-  const usernameRegex = /^.{1,12}$/;
-  if (!username.match(usernameRegex))
-    throw new ApiError(400, "Invalid username! ! !");
+  const usernameRegex = /^[^\s]{1,12}$/;
+  if (!usernameRegex.test(username))
+    throw new ApiError(
+      400,
+      "Username does not meet the criteria. Please use a username with 1-12 characters with no spaces! ! !"
+    );
 
   const fullNameRegex = /^(?:[A-Za-z]+\s?){1,3}[A-Za-z]+$/;
-  if (!fullName.match(fullNameRegex))
-    throw new ApiError(400, "Invalid full name! ! !");
+  if (!fullNameRegex.test(fullName))
+    throw new ApiError(
+      400,
+      "Full name does not meet the criteria. Please use a full name with no special characters! ! !"
+    );
 
   const passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}$/;
   if (!passwordRegex.test(password))
