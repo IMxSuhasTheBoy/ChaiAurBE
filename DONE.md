@@ -1,0 +1,24 @@
+# !checklist completed api
+
+- like
+  - toggleVideoLike
+  - toggleCommunityPostLike
+  - toggleCommentLike
+- comment
+  - addCommentOnVideo
+  - addCommentOnCommunityPost
+  - updateComment
+  - deleteComment
+- video
+  - publishAVideo
+  - updateVideo
+  - deleteVideo
+  - togglePublishStatus
+- communitypost
+  - createCommunityPost
+  - updateCommunityPost
+  - deleteCommunityPost
+- subscription
+  - toggleSubscription
+- user
+  -
