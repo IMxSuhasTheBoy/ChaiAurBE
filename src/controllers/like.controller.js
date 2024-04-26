@@ -184,4 +184,238 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
   }
 });
 
-export { toggleCommentLike, toggleCommunityPostLike, toggleVideoLike };
+//TODO: Only logged in users can get their liked videos list(only videos that are published by videoOwner):Test case from video.controller:- 4 user fetches getLikedVideos 4!imlement✔ only returns liked videos thier field isPublished: true (behind the scenes: the liked documents are still preserved even video is unpublished)
+//? is  it required to delete video here that are found here not exists? at match stage maybe?
+const getLikedVideos = asyncHandler(async (req, res) => {
+  console.log(req.user._id.toString(), "req.user._id getLikedVideos");
+  //!mplement aggregationPagination varient
+  try {
+    const likedVideos = await Like.aggregate([
+      {
+        // [ {like doc}, {}...] the liked videos which are liked by the logged in user
+        $match: {
+          likedBy: new mongoose.Types.ObjectId(req.user?._id),
+        },
+      },
+      {
+        // [ {like doc, "likedVideos":[{video doc}] }, {}...] new field("likedVideos") with like doc
+        $lookup: {
+          from: "videos",
+          let: { videoId: "$video" },
+          //!mplement✔ filteration for unpublished videos
+          // [ {like doc, "likedVideos":[{video doc(filtered)}] }, {}...] filtered out videos which are not published
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$videoId"] },
+                isPublished: true,
+              },
+            },
+          ],
+          as: "likedVideos",
+        },
+      },
+      {
+        // [ {like doc, "likedVideos":{video doc} }, {}...] merged {video doc} the field "likedVideos" with like doc
+        $unwind: "$likedVideos",
+      },
+      {
+        // [ {like doc, "likedVideos":{video doc}, "videoOwner":[{user doc}] }, {}...] new field("videoOwner") with like doc, project only the required fields from it using pipeline
+        $lookup: {
+          from: "users",
+          let: { videoOwner_id: "$likedVideos.videoOwner" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$videoOwner_id"] },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                username: 1,
+                // avatar: 1,
+                fullName: 1,
+              },
+            },
+          ],
+          as: "videoOwner",
+        },
+      },
+      {
+        // [ {like doc, "likedVideos":{video doc}, "videoOwner":{user doc} }, {}...]  merged {user doc} the field "videoOwner" with like doc
+        $unwind: { path: "$videoOwner", preserveNullAndEmptyArrays: true },
+      },
+      {
+        // project only the required fields from it using custom field names too (overriden the like._id with "likedVideos._id")
+        $project: {
+          // likedBy: 1,
+          _id: "$likedVideos._id",
+          title: "$likedVideos.title",
+          // thumbnail: "$likedVideos.thumbnail",
+          duration: "$likedVideos.duration",
+          views: "$likedVideos.views",
+          videoOwnerDetails: {
+            username: "$videoOwner.username",
+            // avatar: "$videoOwner.avatar",
+            fullName: "$videoOwner.fullName",
+          },
+        },
+      },
+
+      // {
+      //   $replaceRoot: { newRoot: "$likedVideos" },
+      // },
+    ]);
+
+    //?another way
+    const matchStage = {
+      $match: {
+        likedBy: new mongoose.Types.ObjectId(req.user?._id),
+      },
+    };
+
+    const lookupStage1 = {
+      $lookup: {
+        from: "videos",
+        let: { videoId: "$video" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$_id", "$$videoId"] },
+              isPublished: true,
+            },
+          },
+        ],
+        as: "likedVideos",
+      },
+    };
+
+    const unwindStage1 = {
+      $unwind: "$likedVideos",
+    };
+
+    const lookupStage2 = {
+      $lookup: {
+        from: "users",
+        let: { videoOwner_id: "$likedVideos.videoOwner" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$_id", "$$videoOwner_id"] },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              username: 1,
+              fullName: 1,
+            },
+          },
+        ],
+        as: "videoOwner",
+      },
+    };
+
+    const unwindStage2 = {
+      $unwind: { path: "$videoOwner", preserveNullAndEmptyArrays: true },
+    };
+
+    const projectStage = {
+      $project: {
+        _id: "$likedVideos._id",
+        title: "$likedVideos.title",
+        duration: "$likedVideos.duration",
+        views: "$likedVideos.views",
+        videoOwner: {
+          username: "$videoOwner.username",
+          fullName: "$videoOwner.fullName",
+        },
+      },
+    };
+
+    const groupStage = {
+      $group: {
+        _id: null,
+        likedVideos: { $push: "$$ROOT" },
+      },
+    };
+
+    const projectFinalStage = {
+      $project: {
+        _id: 0,
+        likedVideos: {
+          $arrayToObject: {
+            $map: {
+              input: "$likedVideos",
+              as: "likedVideo",
+              in: {
+                k: { $toString: "$$likedVideo._id" },
+                v: {
+                  _id: "$$likedVideo._id",
+                  title: "$$likedVideo.title",
+                  duration: "$$likedVideo.duration",
+                  views: "$$likedVideo.views",
+                  videoOwnerDetails: "$$likedVideo.videoOwner",
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const replaceRootStage = {
+      $replaceRoot: {
+        newRoot: "$likedVideos",
+      },
+    };
+
+    const refactoredPipeline = [
+      matchStage,
+      lookupStage1,
+      unwindStage1,
+      lookupStage2,
+      unwindStage2,
+      projectStage,
+      groupStage,
+      projectFinalStage,
+      replaceRootStage,
+    ];
+
+    // const likedVideos = await Like.aggregate(refactoredPipeline);
+
+    if (!likedVideos) {
+      throw new ApiError(500, "Error in fetching liked videos! ! !");
+    } //! mmore checks may require for aggregation result failure
+
+    const likedVideosCount = likedVideos.length;
+
+    console.log(likedVideos, " : likedVideos");
+    // console.log(likedVideos[0].likedVideos," : likedVideos[0].likedVideos [{}, {},...]");
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        likedVideos,
+        // {
+        //   likedVideosCount,
+        //   // likedVideos: likedVideos[0]?.likedVideos,
+        //   likedVideos,
+        // },
+        "Liked videos fetched successfully!!!"
+      )
+    );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error in fetching liked videos! ! !"
+    );
+  }
+});
+
+export {
+  toggleCommentLike,
+  toggleCommunityPostLike,
+  toggleVideoLike,
+  getLikedVideos,
+};

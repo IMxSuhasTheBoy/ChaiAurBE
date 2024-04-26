@@ -14,105 +14,134 @@ import {
 import { Video } from "../models/video.model.js";
 import { Like } from "../models/like.model.js";
 import { Comment } from "../models/comment.model.js";
+import { User } from "../models/user.model.js";
 
-//TODO: Get all videos based on query, sort, pagination , test is to be done yet using anyones userId to fetch their videos
-//? skipped for later , coudn't find a way to filter unpublished videos, cause requiremnt unclear
-//!filter unpublished
 const getAllVideos = asyncHandler(async (req, res) => {
-  //   let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
-  //   console.log(userId, ": : userId");
-  //   //TODO: 1 Parse page and limit to numbers. Base 10 (decimal): The default base if the radix is not provided. Numbers are represented using digits 0-9.
-  //   page = parseInt(page, 10);
-  //   limit = parseInt(limit, 10);
-  //   //TODO: 2 Set default values if query params are not provided
-  //   page = Math.max(1, page); // page should be greater than 0 //ex: page is -1, it will be set to 1 / page is 3, it will be set to 3
-  //   limit = Math.min(20, Math.max(1, limit)); // limit should be between 1 and 20 //ex: limit is 0, it will be set to 1 / limit is 50, it will be set to 20
-  //   const options = {
-  //     page,
-  //     limit,
-  //     sort: { createdAt: -1 },
-  //   };
-  //   const pipeline = []; //TODO: 3 - Structure pipeline based on below checks & query params
-  //   // match videos by owner userId if provided
-  //   if (userId) {
-  //     if (!isValidObjectId(userId)) {
-  //       throw new ApiError(400, "Invalid userId");
-  //     }
-  //     pipeline.push({
-  //       $match: {
-  //         videoOwner: new mongoose.Types.ObjectId(userId),
-  //       },
-  //     });
-  //   } //ex: [{'$match': { videoOwner: new ObjectId('660d44370718ff71f2fd8163') }},{ '$sort': { createdAt: -1 } },{ '$skip': 0 },{ '$limit': 10 }]
-  //   // match videos by query if provided
-  //   if (query && query.trim() !== "") {
-  //     pipeline.push({
-  //       $match: {
-  //         $or: [
-  //           { title: { $regex: query, $options: "i" } },
-  //           { description: { $regex: query, $options: "i" } },
-  //         ], //looks for substring present in title/description field of the document case-insensessive operation
-  //       },
-  //     });
-  //   }
-  //   // sort videos by sortBy and sortType if provided
-  //   // const sortCriteria = {};
-  //   // if (sortBy && sortType) {
-  //   //   sortCriteria[sortBy] = sortType === "asc" ? 1 : -1;
-  //   //   pipeline.push({
-  //   //     $sort: sortCriteria,
-  //   //   });
-  //   // } else {
-  //   //   // default sort by createdAt in descending order
-  //   //   sortCriteria["createdAt"] = -1;
-  //   //   pipeline.push({
-  //   //     $sort: sortCriteria,
-  //   //   });
-  //   // }
-  //   // add pagination using skip and limit
-  //   // pipeline.push({
-  //   //   $skip: (page - 1) * limit,
-  //   // });
-  //   // pipeline.push({
-  //   //   $limit: limit,
-  //   // });
-  //   console.log("pipeline", pipeline, "pipeline");
-  //   /** // execute the aggregatePaginate pipeline returns { "statusCode": 200, "data": { "docs":[ {}, {}, {} ] }, "details":  .... }
-  //   Video.aggregatePaginate(pipeline)
-  //     .then((result) => {
-  //       return res
-  //         .status(200)
-  //         .json(new ApiResponse(200, result, "Videos fetched successfully!!!"));
-  //     })
-  //     .catch((error) => {
-  //       throw new ApiError(
-  //         500,
-  //         error?.message || "Error in fetching videos! ! !"
-  //       );
-  //     });
-  //   */
-  //   //TODO: 4 execute the aggregation pipeline
-  //   try {
-  //     // const videos = await Video.aggregatePaginate(pipeline, options);
-  //     // console.log(videos, " : videos");
-  //     const query = Video.aggregate([
-  //       {
-  //         $match: {
-  //           videoOwner: new mongoose.Types.ObjectId(userId),
-  //         },
-  //       },
-  //     ]);
-  //     const videos = await Video.aggregatePaginate(query, options);
-  //     if (!videos) {
-  //       throw new ApiError(500, "Error in fetching videos! ! !");
-  //     } //mmore checks may require for aggregation result failure
-  //     //TODO: 5
-  //     return res
-  //       .status(200)
-  //       .json(new ApiResponse(200, videos, "Videos fetched successfully!!!"));
-  //   } catch (error) {
-  //     throw new ApiError(500, error?.message || "Error in fetching videos! ! !");
-  //   }
+  let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+
+  //TODO: 1 Parse page and limit to numbers. Base 10 (decimal): The default base if the radix is not provided. Numbers are represented using digits 0-9.
+  page = parseInt(page, 10);
+  limit = parseInt(limit, 10);
+
+  //TODO: 2 Set default values if query params are not provided
+  page = Math.max(1, page); // page should be greater than 0 //ex: page is -1, it will be set to 1 / page is 3, it will be set to 3
+  limit = Math.min(20, Math.max(1, limit)); // limit should be between 1 and 20 //ex: limit is 0, it will be set to 1 / limit is 50, it will be set to 20
+
+  const pipeline = [];
+
+  // match videos by owner userId if provided
+  if (userId) {
+    if (!isValidObjectId(userId)) {
+      throw new ApiError(400, "Invalid userId");
+    }
+
+    if (userId !== req.user?._id.toString()) {
+      pipeline.push({
+        $match: {
+          isPublished: true,
+          videoOwner: new mongoose.Types.ObjectId(userId),
+        },
+      });
+      console.log(
+        ": provided userId is not logged in user, published videos by provided userId(videoOwner) will be returnd"
+      );
+    }
+
+    if (userId === req.user?._id.toString()) {
+      pipeline.push({
+        $match: {
+          videoOwner: new mongoose.Types.ObjectId(userId),
+        },
+      });
+      console.log(
+        ": provided userId is logged in user, all videos by provided userId(videoOwner) will be returnd"
+      );
+    }
+  } else {
+    pipeline.push({
+      $match: {
+        isPublished: true,
+      },
+    });
+    console.log(
+      ": no userId provided, all published videos documents will be returned"
+    );
+  }
+
+  // match videos by query if provided
+  if (query) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { title: { $regex: query, $options: "i" } },
+          { description: { $regex: query, $options: "i" } },
+        ],
+      },
+    });
+  }
+
+  // sort videos by sortBy and sortType if provided
+  const sortCriteria = {};
+  if (sortBy && sortType) {
+    sortCriteria[sortBy] = sortType === "asc" ? 1 : -1;
+    pipeline.push({
+      $sort: sortCriteria,
+    });
+  } else {
+    // default sort by createdAt in descending order
+    sortCriteria["createdAt"] = -1;
+    pipeline.push({
+      $sort: sortCriteria,
+    });
+  }
+
+  // const options = {
+  //   page: parseInt(page),
+  //   limit: parseInt(limit),
+  //   sort: sortBy
+  //     ? { [sortBy]: sortType === "desc" ? -1 : 1 }
+  //     : { createdAt: -1 },
+  // };
+
+  // add pagination using skip and limit
+  // pipeline.push({
+  //   $skip: (page - 1) * limit,
+  // });
+  // pipeline.push({
+  //   $limit: limit,
+  // });
+
+  console.log(pipeline, " : pipeline");
+  try {
+    // execute the aggregation pipeline
+    const videos = await Video.aggregate(pipeline).exec();
+
+    for (let video of videos) {
+      const likes = await Like.find({ video: video._id }).populate(
+        "likedBy",
+        "fullName username"
+      );
+      video.likes = likes.map((like) => like.likedBy);
+
+      // Populate 'owner' field
+      const owner = await User.findById(video.videoOwner).select(
+        "fullName username"
+      );
+      video.videoOwner = owner;
+    }
+
+    // const videos = await Video.aggregatePaginate(pipeline);
+    console.log(videos.length, " : videos.length");
+    if (!videos) {
+      throw new ApiError(500, "Error in fetching videos");
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, videos, "Videos fetched successfully"));
+  } catch (error) {
+    throw new ApiError(500, error?.message || "Error in fetching videos");
+  }
 });
 
 //
@@ -214,7 +243,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 });
 
-//TODO: fetch video : usage unclear //? checks of this fn should be according to purpose of this fn(clearly defined later maybe), OR WEB-APP may require another similar fn for another similar access control
+//TODO: This fn fetches video by videoId and populate likes and comments count and videoOwner field, updates views & watchHistory
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
@@ -223,24 +252,74 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
   }
 
-  // try {
   //TODO: 2 find video
-  const video = await Video.findById(videoId).exec();
+  const video = await Video.findById(videoId)
+    .populate({
+      path: "videoOwner",
+      select: " username",
+      // select: "avatar fullName username",
+    })
+    .select("-__v -updatedAt");
 
-  if (
-    !video ||
-    (!video?.isPublished &&
-      video?.videoOwner.toString() !== req.user?._id.toString()) //!Need to make changes as per strategy requirements, this strategy is for loggedin users having access to his videos
-  ) {
+  if (!video) {
+    existsCheck(videoId, Video, "getVideoById"); //!experimental
     throw new ApiError(404, "Video not found! ! !");
   }
+  if (!video?.isPublished) {
+    throw new ApiError(404, "Video not found! ! ! !");
+  }
+
+  //try
+  //TODO: 3 count of likes and comments
+  const numberOfLikes = await Like.countDocuments({ video: video._id });
+  const numberOfComments = await Comment.countDocuments({ video: video._id });
+
+  //   if (
+  //     !video ||
+  //     (!video?.isPublished &&
+  //       video?.videoOwner.toString() !== req.user?._id.toString()) //!Need to make changes as per strategy requirements, this strategy is for loggedin users having access to his videos
+  //   ) {
+  //     throw new ApiError(404, "Video not found! ! !");
+  //   }
+
+  //TODO: 4 update watch history of logged in user
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $addToSet: { watchHistory: video._id },
+    },
+    { new: true }
+  );
+
+  //TODO: 5 increment views of the video
+  await Video.findByIdAndUpdate(
+    video._id,
+    {
+      $inc: { views: 1 },
+    },
+    { new: true }
+  );
+
+  //TODO: 6 dynamically add numberOfLikes to the video object
+  const videoWithNumberOfLikesAndComments = {
+    ...video.toObject(),
+    numberOfLikes: numberOfLikes,
+    numberOfComments: numberOfComments,
+  };
 
   return res
     .status(200)
-    .json(new ApiResponse(200, video, "Video fetched successfully!!!"));
+    .json(
+      new ApiResponse(
+        200,
+        videoWithNumberOfLikesAndComments,
+        "Video fetched successfully!!!"
+      )
+    );
   // } catch (error) {
   //   throw new ApiError(500, error?.message || "Error fetching the video! ! !");
   // }
+  // });
 });
 
 //TODO: This fn updates video details title, description, thumbnail if atleast any one from it provided (only video owner can update details)
