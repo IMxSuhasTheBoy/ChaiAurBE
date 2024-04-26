@@ -172,6 +172,7 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   //TODO: 1 take fields
   const { email, username, password } = req.body;
+  console.log("loginUser", email, username, password);
 
   //TODO: 2 check for empty & valid fields //validation of syntax for email must be on frontend
   if ([email, username].some((field) => field?.trim() === "" || !field))
@@ -387,12 +388,14 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     );
   }
 
+  let flag = 0;
   //TODO: 3 new field differs from old field ? (valid ? save : error) : move
   if (fullName && fullName !== user.fullName) {
     const fullNameRegex = /^(?:[A-Za-z]+\s?){1,3}[A-Za-z]+$/;
-
+    console.log(" in f");
     if (fullNameRegex.test(fullName)) {
       user.fullName = fullName;
+      flag += 1;
     } else {
       throw new ApiError(400, "Invalid full name! ! !");
     }
@@ -400,14 +403,23 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 
   if (email && email !== user.email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
+    console.log(" in e");
     if (emailRegex.test(email)) {
       user.email = email;
+      flag += 1;
     } else {
       throw new ApiError(400, "Invalid email address! ! !");
     }
   }
 
+  //TODO: 4 detected no changes ? return user : save changes & return user
+  if (flag === 0) {
+    return res
+      .status(200)
+      .json(new ApiResponse(200, user, "No changes made!!!"));
+  }
+
+  //TODO: 3
   user.save({ validateBeforeSave: false });
 
   //TODO: 3 find & update user, without validations & additional checks, alternatively
@@ -462,7 +474,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     { new: true }
   ).select("-password");
 
-  //TODO: 4.2 destroy old if cloud uploaded matches with DB updated ? destroy Old : move
+  //TODO: 4.2 cloud uploaded matches with DB updated ? destroy Old : error
   if (user.avatar === avatar.url) {
     await destroyFileOnCloudinary(folderPath, oldAvatarCloudUrl);
   } else {
@@ -471,6 +483,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
       "Something went wrong while updating user avatar! ! !"
     );
   }
+  //! when fails to update avatar in db/cloud upload, the local file is kept for retrying upload operation case.
 
   //TODO: 5
   return res
@@ -525,6 +538,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
       500,
       "Something went wrong while updating user cover image in database! ! !"
     );
+  //! when fails to update cover image in DB/cloud upoad, the local file is kept for retry upload operation case.
 
   //TODO: 4.2 strategy for calling destroy only if the coverImage was uploaded on registeration & cloud uploaded matches with DB updated
   if (!coverImageOldCloudUrl && user.coverImage === coverImage.url)
@@ -617,15 +631,15 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   //TODO: 1
   // console.log("getWatchHistory current user id ", typeof req.user._id),
 
-  console.log(
-    await User.aggregate([
-      {
-        $match: {
-          _id: new mongoose.Types.ObjectId(req.user._id),
-        },
-      },
-    ])
-  );
+  // console.log(
+  //   await User.aggregate([
+  //     {
+  //       $match: {
+  //         _id: new mongoose.Types.ObjectId(req.user._id),
+  //       },
+  //     },
+  //   ])
+  // );
   const user = await User.aggregate([
     {
       $match: {
