@@ -16,8 +16,10 @@ import { Like } from "../models/like.model.js";
 import { Comment } from "../models/comment.model.js";
 import { User } from "../models/user.model.js";
 
+//TODO: The fn fetches all videos according to query params
 const getAllVideos = asyncHandler(async (req, res) => {
-  let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+  const { query, sortBy, sortType, userId } = req.query;
+  let { page = 1, limit = 10 } = req.query;
 
   //TODO: 1 Parse page and limit to numbers. Base 10 (decimal): The default base if the radix is not provided. Numbers are represented using digits 0-9.
   page = parseInt(page, 10);
@@ -29,7 +31,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
   const pipeline = [];
 
-  // match videos by owner userId if provided
+  //TODO: 3 userId ? match videos according to checks for userId
   if (userId) {
     if (!isValidObjectId(userId)) {
       throw new ApiError(400, "Invalid userId");
@@ -42,9 +44,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
           videoOwner: new mongoose.Types.ObjectId(userId),
         },
       });
-      console.log(
-        ": provided userId is not logged in user, published videos by provided userId(videoOwner) will be returnd"
-      );
+      // console.log(": provided userId is not logged in user, published videos by provided userId(videoOwner) will be returnd");
     }
 
     if (userId === req.user?._id.toString()) {
@@ -53,9 +53,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
           videoOwner: new mongoose.Types.ObjectId(userId),
         },
       });
-      console.log(
-        ": provided userId is logged in user, all videos by provided userId(videoOwner) will be returnd"
-      );
+      // console.log(": provided userId is logged in user, all videos by provided userId(videoOwner) will be returnd");
     }
   } else {
     pipeline.push({
@@ -63,12 +61,10 @@ const getAllVideos = asyncHandler(async (req, res) => {
         isPublished: true,
       },
     });
-    console.log(
-      ": no userId provided, all published videos documents will be returned"
-    );
+    // console.log(": no userId provided, all published videos documents will be returned");
   }
 
-  // match videos by query if provided
+  //TODO: 4 query ? try matching by field substring search
   if (query) {
     pipeline.push({
       $match: {
@@ -80,7 +76,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
     });
   }
 
-  // sort videos by sortBy and sortType if provided
+  //TODO: 5 sort videos by sortBy and sortType if provided
   const sortCriteria = {};
   if (sortBy && sortType) {
     sortCriteria[sortBy] = sortType === "asc" ? 1 : -1;
@@ -88,7 +84,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
       $sort: sortCriteria,
     });
   } else {
-    // default sort by createdAt in descending order
+    //*default sort by createdAt in descending order
     sortCriteria["createdAt"] = -1;
     pipeline.push({
       $sort: sortCriteria,
@@ -113,9 +109,10 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
   console.log(pipeline, " : pipeline");
   try {
-    // execute the aggregation pipeline
+    //TODO: 6 execute the aggregation pipeline
     const videos = await Video.aggregate(pipeline).exec();
 
+    //TODO: 7 populate fields
     for (let video of videos) {
       const likes = await Like.find({ video: video._id }).populate(
         "likedBy",
@@ -123,51 +120,27 @@ const getAllVideos = asyncHandler(async (req, res) => {
       );
       video.likes = likes.map((like) => like.likedBy);
 
-      // Populate 'owner' field
-      const owner = await User.findById(video.videoOwner).select(
+      const ownerDets = await User.findById(video.videoOwner).select(
         "fullName username"
       );
-      video.videoOwner = owner;
+      video.videoOwner = ownerDets;
     }
 
     // const videos = await Video.aggregatePaginate(pipeline);
     console.log(videos.length, " : videos.length");
     if (!videos) {
-      throw new ApiError(500, "Error in fetching videos");
+      throw new ApiError(500, "Error in fetching videos! ! !");
     }
 
     return res
       .status(200)
-      .json(new ApiResponse(200, videos, "Videos fetched successfully"));
+      .json(new ApiResponse(200, videos, "Videos fetched successfully!!!"));
   } catch (error) {
-    throw new ApiError(500, error?.message || "Error in fetching videos");
+    throw new ApiError(500, error?.message || "Error in fetching videos! ! !");
   }
 });
 
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-
-//TODO: This fn creates a video - with title, description, videoFile, thumbnailFile, isPublished*
+//TODO: The fn creates a video - with title, description, videoFile, thumbnailFile, isPublished*
 const publishAVideo = asyncHandler(async (req, res) => {
   //TODO✔ if any of videoFile or thumbnailFile is failed to upload cloud, throw error / delete cloud files of uploaded one of it
   const { title, description, isPublished = true } = req.body;
@@ -243,7 +216,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 });
 
-//TODO: This fn fetches video by videoId and populate likes and comments count and videoOwner field, updates views & watchHistory
+//TODO: The fn fetches video by videoId(only published) and populate likes and comments count and videoOwner field, updates views & watchHistory
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
@@ -322,7 +295,7 @@ const getVideoById = asyncHandler(async (req, res) => {
   // });
 });
 
-//TODO: This fn updates video details title, description, thumbnail if atleast any one from it provided (only video owner can update details)
+//TODO: The fn updates video details title, description, thumbnail if atleast any one from it provided (only video owner can update details)
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
@@ -406,7 +379,7 @@ const updateVideo = asyncHandler(async (req, res) => {
   }
 });
 
-//TODO: This fn deletes all docs related to requested video when requested video deletes successfully in this function by video owner
+//TODO: The fn deletes all docs related to requested video when requested video deletes successfully in this function by video owner
 const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
@@ -539,7 +512,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
   }
 });
 
-//TODO: This fn toggles the publish status of the video by video owner
+//TODO: The fn toggles the publish status of the video by video owner
 const togglePublishStatus = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
