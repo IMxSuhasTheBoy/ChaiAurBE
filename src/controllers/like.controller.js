@@ -21,7 +21,7 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
 
   //TODO: 2 find video
-  const videoExists = await Video.findOne({ _id: videoId });
+  const videoExists = await Video.findById(videoId).exec();
 
   if (!videoExists) existsCheck(videoId, Video, "toggleVideoLike"); //!experimental
 
@@ -184,91 +184,138 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
   }
 });
 
-//TODO: Only logged in users can get their liked videos list(only videos that are published by videoOwner):Test case from video.controller:- 4 user fetches getLikedVideos 4!imlement✔ only returns liked videos thier field isPublished: true (behind the scenes: the liked documents are still preserved even video is unpublished)
-//? is  it required to delete video here that are found here not exists? at match stage maybe?
+//TODO: The fn used to return liked videos list of logged in user (returns videos that are at published stage by videoOwner) (when video goes at unpublished state: the liked documents of video are still preserved)
 const getLikedVideos = asyncHandler(async (req, res) => {
-  console.log(req.user._id.toString(), "req.user._id getLikedVideos");
-  //!mplement aggregationPagination varient
-  try {
-    const likedVideos = await Like.aggregate([
-      {
-        // [ {like doc}, {}...] the liked videos which are liked by the logged in user
-        $match: {
-          likedBy: new mongoose.Types.ObjectId(req.user?._id),
-        },
+  const aggregateLikedVideos = Like.aggregate([
+    {
+      // [ {like doc}, {}...] the liked docs for videos which all are liked by logged in user
+      $match: {
+        likedBy: new mongoose.Types.ObjectId(req.user?._id),
       },
-      {
-        // [ {like doc, "likedVideos":[{video doc}] }, {}...] new field("likedVideos") with like doc
-        $lookup: {
-          from: "videos",
-          let: { videoId: "$video" },
-          //!mplement✔ filteration for unpublished videos
-          // [ {like doc, "likedVideos":[{video doc(filtered)}] }, {}...] filtered out videos which are not published
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$_id", "$$videoId"] },
-                isPublished: true,
-              },
+    },
+    {
+      // [ {like doc, "likedVideoDoc":[{video doc}] }, {}...] new field added "likedVideoDoc" into like doc and project only the required fields from it
+      $lookup: {
+        from: "videos",
+        let: { videoId: "$video" }, //$video field from like doc (it's ObjectId of video)
+        //!mplement✔   filter out unpublished videos
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$_id", "$$videoId"] },
+              isPublished: true,
             },
-          ],
-          as: "likedVideos",
-        },
-      },
-      {
-        // [ {like doc, "likedVideos":{video doc} }, {}...] merged {video doc} the field "likedVideos" with like doc
-        $unwind: "$likedVideos",
-      },
-      {
-        // [ {like doc, "likedVideos":{video doc}, "videoOwner":[{user doc}] }, {}...] new field("videoOwner") with like doc, project only the required fields from it using pipeline
-        $lookup: {
-          from: "users",
-          let: { videoOwner_id: "$likedVideos.videoOwner" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$_id", "$$videoOwner_id"] },
-              },
-            },
-            {
-              $project: {
-                _id: 0,
-                username: 1,
-                // avatar: 1,
-                fullName: 1,
-              },
-            },
-          ],
-          as: "videoOwner",
-        },
-      },
-      {
-        // [ {like doc, "likedVideos":{video doc}, "videoOwner":{user doc} }, {}...]  merged {user doc} the field "videoOwner" with like doc
-        $unwind: { path: "$videoOwner", preserveNullAndEmptyArrays: true },
-      },
-      {
-        // project only the required fields from it using custom field names too (overriden the like._id with "likedVideos._id")
-        $project: {
-          // likedBy: 1,
-          _id: "$likedVideos._id",
-          title: "$likedVideos.title",
-          // thumbnail: "$likedVideos.thumbnail",
-          duration: "$likedVideos.duration",
-          views: "$likedVideos.views",
-          videoOwnerDetails: {
-            username: "$videoOwner.username",
-            // avatar: "$videoOwner.avatar",
-            fullName: "$videoOwner.fullName",
           },
+          {
+            $project: {
+              title: 1,
+              duration: 1,
+              views: 1,
+              videoOwner: 1,
+              thumbnail: 1,
+              createdAt: 1,
+            },
+          },
+        ],
+        as: "likedVideoDoc",
+      },
+    },
+    {
+      // [ {like doc, "likedVideoDoc":{video doc} }, {}...] merged {video doc} the field "likedVideoDoc" with like doc
+      $unwind: "$likedVideoDoc",
+    },
+    {
+      // [ {like doc, "likedVideos":{video doc}, "videoOwnerDoc":[{user doc}] }, {}...] new field "videoOwnerDoc" added into like doc and project only the required fields from it
+      $lookup: {
+        from: "users",
+        let: { videoOwner_id: "$likedVideoDoc.videoOwner" }, //$likedVideoDoc.videoOwner field from like doc (it's ObjectId of user)
+
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$_id", "$$videoOwner_id"] },
+            },
+          },
+          {
+            $project: {
+              _id: 0, //likeDoc id is not required
+              username: 1,
+              avatar: 1,
+              // fullName: 1,
+            },
+          },
+        ],
+        as: "videoOwnerDoc",
+      },
+    },
+    {
+      // [ {like doc, "likedVideoDoc":{video doc}, "videoOwnerDoc":{user doc} }, {}...]  merged {user doc} the field "videoOwnerDoc" with like doc
+      $unwind: { path: "$videoOwnerDoc", preserveNullAndEmptyArrays: true },
+    },
+    {
+      //TODO: project only the required fields custom field names too (the like._id overwrited with likedVideoDoc._id)
+      $project: {
+        // likedBy: 1,
+        _id: "$likedVideoDoc._id",
+        title: "$likedVideoDoc.title",
+        thumbnail: "$likedVideoDoc.thumbnail",
+        duration: "$likedVideoDoc.duration",
+        views: "$likedVideoDoc.views",
+        createdAt: "$likedVideoDoc.createdAt",
+        videoOwnerDetails: {
+          username: "$videoOwnerDoc.username",
+          avatar: "$videoOwnerDoc.avatar",
+          // fullName: "$videoOwner.fullName",
         },
       },
+    },
+  ]);
+  const options = {
+    page: 1,
+    limit: 10,
+  };
 
-      // {
-      //   $replaceRoot: { newRoot: "$likedVideos" },
-      // },
-    ]);
+  try {
+    Like.aggregatePaginate(aggregateLikedVideos, options)
+      .then(function (likedVideos) {
+        // console.log(likedVideos);
+        console.log(likedVideos.docs.length, " : likedVideos length");
+        return res
+          .status(200)
+          .json(
+            new ApiResponse(
+              200,
+              likedVideos,
+              likedVideos.docs.length > 0
+                ? "Liked videos fetched successfully!!!"
+                : "No liked videos found!!!"
+            )
+          );
+      })
+      .catch(function (error) {
+        // console.log(error);
+        throw new ApiError(
+          500,
+          error?.message || `Error in fetching liked videos! ! !`
+        );
+      });
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error in fetching liked videos! ! !"
+    );
+  }
+});
 
-    //?another way
+export {
+  toggleCommentLike,
+  toggleCommunityPostLike,
+  toggleVideoLike,
+  getLikedVideos,
+};
+
+/* 
+//!experimental  another way
     const matchStage = {
       $match: {
         likedBy: new mongoose.Types.ObjectId(req.user?._id),
@@ -276,7 +323,7 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     };
 
     const lookupStage1 = {
-      $lookup: {
+       $lookup: {
         from: "videos",
         let: { videoId: "$video" },
         pipeline: [
@@ -286,19 +333,29 @@ const getLikedVideos = asyncHandler(async (req, res) => {
               isPublished: true,
             },
           },
+          {
+            $project: {
+              title: 1,
+              duration: 1,
+              views: 1,
+              videoOwner: 1,
+              thumbnail: 1,
+              createdAt: 1,
+            },
+          },
         ],
-        as: "likedVideos",
+        as: "likedVideoDoc",
       },
     };
 
     const unwindStage1 = {
-      $unwind: "$likedVideos",
+      $unwind: "$likedVideoDoc",
     };
 
     const lookupStage2 = {
       $lookup: {
         from: "users",
-        let: { videoOwner_id: "$likedVideos.videoOwner" },
+        let: { videoOwner_id: "$likedVideoDoc.videoOwner" }, 
         pipeline: [
           {
             $match: {
@@ -307,29 +364,34 @@ const getLikedVideos = asyncHandler(async (req, res) => {
           },
           {
             $project: {
-              _id: 0,
+              _id: 0, //likeDoc id is not required
               username: 1,
-              fullName: 1,
+              avatar: 1,
+              // fullName: 1,
             },
           },
         ],
-        as: "videoOwner",
+        as: "videoOwnerDoc",
       },
     };
 
     const unwindStage2 = {
-      $unwind: { path: "$videoOwner", preserveNullAndEmptyArrays: true },
+      $unwind: { path: "$videoOwnerDoc", preserveNullAndEmptyArrays: true },
     };
 
     const projectStage = {
       $project: {
-        _id: "$likedVideos._id",
-        title: "$likedVideos.title",
-        duration: "$likedVideos.duration",
-        views: "$likedVideos.views",
-        videoOwner: {
-          username: "$videoOwner.username",
-          fullName: "$videoOwner.fullName",
+        // likedBy: 1,
+        _id: "$likedVideoDoc._id",
+        title: "$likedVideoDoc.title",
+        thumbnail: "$likedVideoDoc.thumbnail",
+        duration: "$likedVideoDoc.duration",
+        views: "$likedVideoDoc.views",
+        createdAt: "$likedVideoDoc.createdAt",
+        videoOwnerDetails: {
+          username: "$videoOwnerDoc.username",
+          avatar: "$videoOwnerDoc.avatar",
+          // fullName: "$videoOwner.fullName",
         },
       },
     };
@@ -385,37 +447,6 @@ const getLikedVideos = asyncHandler(async (req, res) => {
 
     // const likedVideos = await Like.aggregate(refactoredPipeline);
 
-    if (!likedVideos) {
-      throw new ApiError(500, "Error in fetching liked videos! ! !");
-    } //! mmore checks may require for aggregation result failure
 
-    const likedVideosCount = likedVideos.length;
 
-    console.log(likedVideos, " : likedVideos");
-    // console.log(likedVideos[0].likedVideos," : likedVideos[0].likedVideos [{}, {},...]");
-    return res.status(200).json(
-      new ApiResponse(
-        200,
-        likedVideos,
-        // {
-        //   likedVideosCount,
-        //   // likedVideos: likedVideos[0]?.likedVideos,
-        //   likedVideos,
-        // },
-        "Liked videos fetched successfully!!!"
-      )
-    );
-  } catch (error) {
-    throw new ApiError(
-      500,
-      error?.message || "Error in fetching liked videos! ! !"
-    );
-  }
-});
-
-export {
-  toggleCommentLike,
-  toggleCommunityPostLike,
-  toggleVideoLike,
-  getLikedVideos,
-};
+*/
