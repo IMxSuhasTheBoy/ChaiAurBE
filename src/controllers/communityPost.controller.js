@@ -48,32 +48,113 @@ const createCommunityPost = asyncHandler(async (req, res) => {
   }
 });
 
-// TODO: -The fn get user CommunityPost figure out purose & output
-const getUserTweets = asyncHandler(async (req, res) => {
-  const { userId } = req.query;
+// TODO: The fn used to return CommunityPosts list of logged in user/requested userId from params if provided
+const getAllCommunityPosts = asyncHandler(async (req, res) => {
+  const { userId } = req.query; // can be "" / whitespaces / undefined
 
-  if (!isValidObjectId(userId)) {
-    throw new ApiError(400, "Invalid userId! ! !");
+  //TODO: 1 check userId if provided
+  let matchUserId = req.user?._id.toString();
+  if (userId !== undefined) {
+    if (!isValidObjectId(userId))
+      throw new ApiError(400, "Invalid userId! ! !");
+
+    if (userId !== req.user?._id.toString()) matchUserId = userId;
   }
 
-  //   if (userId !== req.user?._id.toString()) {
-  //     throw new ApiError(403, "You cannot view others posts! ! !");
-  //   }
+  //TODO: 2 aggregate community posts by logged in user/requested userId
+  const aggregateCommunityPosts = CommunityPost.aggregate([
+    {
+      // getting community post list
+      $match: {
+        communityPostOwner: new mongoose.Types.ObjectId(matchUserId),
+      },
+    },
+    {
+      // getting user doc from communityPostOwner field
+      $lookup: {
+        from: "users",
+        let: { userId: "$communityPostOwner" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$_id", "$$userId"] },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              avatar: 1,
+            },
+          },
+        ],
+        as: "communityPostOwner",
+      },
+    },
+    {
+      $unwind: "$communityPostOwner",
+    },
+    {
+      $graphLookup: {
+        from: "likes",
+        startWith: "$_id",
+        connectFromField: "_id",
+        connectToField: "communityPost",
+        as: "likes",
+        depthField: "depth",
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        content: 1,
+        communityPostOwner: 1,
+        commentsCount: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        __v: 1,
+        communityPostOwner: 1,
+        likesCount: { $size: "$likes" },
+      },
+    },
+  ]);
+
+  console.log(aggregateCommunityPosts, " : aggregateCommunityPosts");
+  const options = {
+    page: 1,
+    limit: 10,
+  };
+
+  //TODO: 3 paginate community posts
+  CommunityPost.aggregatePaginate(aggregateCommunityPosts, options)
+    .then(function (communityPosts) {
+      console.log(communityPosts, " : communityPosts");
+      return res
+        .status(200)
+        .json(new ApiResponse(200, communityPosts, "fetched successfully"));
+    })
+    .catch(function (error) {
+      // console.log(error);
+      throw new ApiError(
+        500,
+        error?.message || `Error in fetching liked videos! ! !`
+      );
+    });
 });
 
 //TODO: The fn updates the requested CommunityPost only when new content provided in the request body, by the logged in community post owner
 const updateCommunityPost = asyncHandler(async (req, res) => {
-  const { communityPostId } = req.params;
+  const { communityPostId } = req.params; //can be whitespaces / :communityPostId
 
   //TODO: 1 check communityPostId
-  if (isInvalidOrEmptyId(communityPostId))
+  if (isInvalidOrEmptyId(communityPostId, "communityPostId"))
     throw new ApiError(400, "Invalid communityPostId or not provided! ! !");
 
   //TODO: 2 find community post
   const communityPost = await CommunityPost.findById(communityPostId).exec();
   // console.log(communityPost, " : communityPost");
   if (!communityPost) {
-    existsCheck(communityPostId, CommunityPost, "updateCommunityPost");
+    existsCheck(communityPostId, CommunityPost, "updateCommunityPost"); //!experimental
     throw new ApiError(404, "Community post not found! ! !");
   }
 
@@ -129,17 +210,17 @@ const updateCommunityPost = asyncHandler(async (req, res) => {
 
 //TODO: This fn deletes all docs related to requested community post when requested community post deletes successfully in this function by community post owner
 const deleteCommunityPost = asyncHandler(async (req, res) => {
-  const { communityPostId } = req.params;
+  const { communityPostId } = req.params; //can be whitespaces / :communityPostId
 
   //TODO: 1 check communityPostId
-  if (isInvalidOrEmptyId(communityPostId))
+  if (isInvalidOrEmptyId(communityPostId, "communityPostId"))
     throw new ApiError(400, "Invalid communityPostId or not provided! ! !");
 
   //TODO: 2 find community post
   const communityPost = await CommunityPost.findById(communityPostId).exec();
 
   if (!communityPost) {
-    existsCheck(communityPostId, CommunityPost, "deleteCommunityPost");
+    existsCheck(communityPostId, CommunityPost, "deleteCommunityPost"); //!experimental
     throw new ApiError(404, "Community post not found! ! !");
   }
 
@@ -163,7 +244,7 @@ const deleteCommunityPost = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Failed to delete community post! ! !");
 
   try {
-    //likes delete
+    //cp likes delete
     const deletedLikes = await Like.deleteMany({
       communityPost: new mongoose.Types.ObjectId(communityPost._id),
     });
@@ -212,7 +293,51 @@ const deleteCommunityPost = asyncHandler(async (req, res) => {
 
 export {
   createCommunityPost,
-  getUserTweets,
+  getAllCommunityPosts,
   updateCommunityPost,
   deleteCommunityPost,
 };
+
+/*
+//!Experimental
+  {
+      $lookup: {
+        from: "comments",
+        let: { communityPostId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$communityPost", "$$communityPostId"],
+              },
+            },
+          },
+          {
+            $count: "count",
+          },
+        ],
+        as: "commentsCount",
+      },
+    },
+    {
+      $unwind: {
+        path: "$commentsCount",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $addFields: {
+        commentsCount: { $ifNull: ["$commentsCount.count", 0] },
+      },
+    },
+
+    const aggregateCommunityPosts = await CommunityPost.aggregate([
+      {
+      // getting community post list
+      $group: {
+        _id: "$communityPostOwner",
+      },
+    },
+  ]);
+  console.log(aggregateCommunityPosts, " : aggregateCommunityPosts");
+  */
