@@ -4,6 +4,15 @@ import { Comment } from "../models/comment.model.js";
 import { CommunityPost } from "../models/communityPost.model.js";
 import { isValidObjectId } from "mongoose";
 
+//The fn to validate the id from req.params: if any of the 3 checks is true fn returns true else false
+const isInvalidOrEmptyId = (id, paramName) => {
+  const isEmptyParam = id === paramName && id.startsWith(":");
+  // console.log(!isValidObjectId(id), " !isValidObjectId(id)");
+  // console.log(isEmptyParam, "isEmptyParam");
+  // console.log(!id?.trim(), " !id?.trim()");
+  return !isValidObjectId(id) || isEmptyParam || !id?.trim();
+};
+
 //Try retry logic too
 const existsCheck = async (documentId, model, api) => {
   const document = await model.findById(documentId);
@@ -44,11 +53,13 @@ const existsCheck = async (documentId, model, api) => {
 //   };
 // };
 
-const isInvalidOrEmptyId = (id) => {
-  return !isValidObjectId(id) || id.trim() === "" || !id;
-};
+// The expression !username?.trim() returns true if the username variable is null, undefined, or if it is a non-empty string that contains only whitespace characters. Otherwise, it returns false. The ?. is the optional chaining operator, which allows you to safely access properties of an object that may be null or undefined.<|endoftext|>
 
 export { existsCheck, isInvalidOrEmptyId };
 
 ///!Checklist api existsCheck
 // updateVideo
+
+// const isInvalidOrEmptyId = (id) => {
+//   return !isValidObjectId(id) || id.trim() === "" || !id;
+// };
