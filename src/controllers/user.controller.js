@@ -21,15 +21,13 @@ const generateAccessAndRefreshTokens = async (userId) => {
    */
   try {
     const user = await User.findById(userId);
-    // console.log("genAccRefTokens", user);
+
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
 
     user.refreshToken = refreshToken;
 
     await user.save({ validateBeforeSave: false }); //Because in this case unnecessary model validation will be triggered at saving the document
-
-    // console.log("genAccRefTokens", user);
 
     return { accessToken, refreshToken };
   } catch (error) {
@@ -375,10 +373,10 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 const updateAccountDetails = asyncHandler(async (req, res) => {
   //TODO: 1 take fields
   const { fullName, email } = req.body;
-  console.log("updateAccountDetails", fullName, email);
+  // console.log("updateAccountDetails", fullName, email);
 
   const user = await User.findById(req.user?._id).select("-password");
-  console.log(user, " updateAccountDetails user");
+  // console.log(user, " updateAccountDetails user");
 
   //TODO: 2 check is atleast one field provided
   if (!fullName && !email) {
@@ -550,12 +548,14 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "Cover image updated successfully!!!"));
 });
 
-//TODO: pupose unclear about who is gona use to get profile, (only profile of user it self / anyone anyones profile)
+//TODO: The fn returns user details, pupose unclear about who is gona use to get profile, (only profile of user it self / anyone anyones profile)
 const getUserChannelProfile = asyncHandler(async (req, res) => {
   //TODO: 1
   const { username } = req.params;
+  console.log(username);
+  // console.log(!username?.trim()); //true if username is null or undefined or if it is a non-empty string that contains only whitespace characters(trimmed).
 
-  if (!username?.trim()) {
+  if (!username?.trim() || username === ":username") {
     throw new ApiError(400, "Please provide username! ! !");
   }
 
@@ -613,7 +613,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       },
     },
   ]);
-  console.log("Channel[0", channel); //aggregation pipeline output :: [Object]
+  // console.log("Channel[0", channel); //aggregation pipeline output :: [Object]
 
   if (!channel?.length) {
     throw new ApiError(404, "Channel does not exists! ! !");
@@ -626,7 +626,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     );
 });
 
-//
+//TODO: The fn returns users watchHistory
 const getWatchHistory = asyncHandler(async (req, res) => {
   //TODO: 1
   // console.log("getWatchHistory current user id ", typeof req.user._id),
@@ -693,6 +693,8 @@ const getWatchHistory = asyncHandler(async (req, res) => {
       )
     );
 });
+
+//delete user ?
 
 export {
   registerUser,
