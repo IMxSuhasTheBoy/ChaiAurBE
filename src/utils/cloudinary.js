@@ -23,6 +23,10 @@ const uploadOnCloudinary = async (localFilePath, type) => {
       folder += "videos/video-files/";
     } else if (type === "videos/thumbnailFile") {
       folder += "videos/thumbnails/";
+    } else if (type === "playlists/thumbnail") {
+      folder += "playlists/playlist-thumbnails/";
+    } else if (type === "folder_name/defaultThumbnail") {
+      folder += "folder_name/";
     }
 
     //TODO: upload file on cloudinary
