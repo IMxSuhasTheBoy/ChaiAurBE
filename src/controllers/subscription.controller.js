@@ -15,10 +15,10 @@ import { User } from "../models/user.model.js";
 
 //TODO: The fn adds a new subscription doc or removes an existing subscription by the logged in user
 const toggleSubscription = asyncHandler(async (req, res) => {
-  const { channelId } = req.params;
+  const { channelId } = req.params; //can be whitespace / :channelId
 
   //TODO: 1 check channelId
-  if (isInvalidOrEmptyId(channelId))
+  if (isInvalidOrEmptyId(channelId, ":channelId"))
     throw new ApiError(400, "Invalid Channel Id or not provided! ! !");
 
   const userchannelExistsId = await User.exists({
@@ -79,14 +79,17 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {
   //TODO: 1 user who wants to get his subscribers list
-  const { channelId } = req.params;
+  const { channelId } = req.params; //can be whitespace / :channelId
   const userId = req.user?._id.toString();
 
-  if (!channelId) {
-    throw new ApiError(400, "Channel ID is required! ! !");
-  } else if (!isValidObjectId(channelId)) {
-    throw new ApiError(400, "Invalid Channel ID! ! !");
-  }
+  if (isInvalidOrEmptyId(channelId, ":channelId"))
+    throw new ApiError(400, "Invalid Channel Id or not provided! ! !");
+
+  // if (!channelId) {
+  //   throw new ApiError(400, "Channel ID is required! ! !");
+  // } else if (!isValidObjectId(channelId)) {
+  //   throw new ApiError(400, "Invalid Channel ID! ! !");
+  // }
 
   //?Strategy addition: userId equals channelId ? give subscribers details list, count : give count.  (addition depends upon usage need)
   if (userId !== channelId) {
@@ -161,11 +164,14 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
 
   const userId = req.user?._id.toString();
 
-  if (!subscriberId) {
-    throw new ApiError(400, "Subscriber ID is required! ! !");
-  } else if (!isValidObjectId(subscriberId)) {
-    throw new ApiError(400, "Invalid Subscriber ID! ! !");
-  }
+  if (isInvalidOrEmptyId(subscriberId, ":subscriberId"))
+    throw new ApiError(400, "Invalid Subscriber Id or not provided! ! !");
+
+  // if (!subscriberId) {
+  //   throw new ApiError(400, "Subscriber ID is required! ! !");
+  // } else if (!isValidObjectId(subscriberId)) {
+  //   throw new ApiError(400, "Invalid Subscriber ID! ! !");
+  // }
 
   if (userId !== subscriberId) {
     throw new ApiError(
