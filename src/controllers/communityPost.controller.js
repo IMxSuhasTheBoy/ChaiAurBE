@@ -147,7 +147,7 @@ const updateCommunityPost = asyncHandler(async (req, res) => {
   const { communityPostId } = req.params; //can be whitespaces / :communityPostId
 
   //TODO: 1 check communityPostId
-  if (isInvalidOrEmptyId(communityPostId, "communityPostId"))
+  if (isInvalidOrEmptyId(communityPostId, ":communityPostId"))
     throw new ApiError(400, "Invalid communityPostId or not provided! ! !");
 
   //TODO: 2 find community post
@@ -213,7 +213,7 @@ const deleteCommunityPost = asyncHandler(async (req, res) => {
   const { communityPostId } = req.params; //can be whitespaces / :communityPostId
 
   //TODO: 1 check communityPostId
-  if (isInvalidOrEmptyId(communityPostId, "communityPostId"))
+  if (isInvalidOrEmptyId(communityPostId, ":communityPostId"))
     throw new ApiError(400, "Invalid communityPostId or not provided! ! !");
 
   //TODO: 2 find community post
