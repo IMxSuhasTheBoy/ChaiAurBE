@@ -14,10 +14,10 @@ import { Comment } from "../models/comment.model.js";
 
 //TODO: The fn either adds a new like or removes an existing like only when the video exists && published: true
 const toggleVideoLike = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const { videoId } = req.params; //can be whitespace / :videoId
 
   //TODO: 1 check videoId
-  if (isInvalidOrEmptyId(videoId))
+  if (isInvalidOrEmptyId(videoId, ":videoId"))
     throw new ApiError(400, "Invalid video id or not provided! ! !");
 
   //TODO: 2 find video
@@ -69,10 +69,10 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
 
 //TODO: The fn either adds a new like or removes an existing like only when the communityPost exists
 const toggleCommunityPostLike = asyncHandler(async (req, res) => {
-  const { communityPostId } = req.params;
+  const { communityPostId } = req.params; //can be whitespace / :communityPostId
 
   //TODO: 1 check communityPostId
-  if (isInvalidOrEmptyId(communityPostId))
+  if (isInvalidOrEmptyId(communityPostId, ":communityPostId"))
     throw new ApiError(400, "Invalid community post id or not provided! ! !");
 
   //TODO: 2 check communityPost exists ? {_id} : null
@@ -81,8 +81,7 @@ const toggleCommunityPostLike = asyncHandler(async (req, res) => {
   });
 
   if (!communityPostExistsId._id) {
-    //!experimental
-    existsCheck(communityPostId, CommunityPost, "toggleCommunityPostLike");
+    existsCheck(communityPostId, CommunityPost, "toggleCommunityPostLike"); //!experimental
     throw new ApiError(404, "Community post not found! ! !");
   }
 
@@ -130,10 +129,10 @@ const toggleCommunityPostLike = asyncHandler(async (req, res) => {
 
 //TODO: The fn either adds a new like or removes an existing like only when the comment exists
 const toggleCommentLike = asyncHandler(async (req, res) => {
-  const { commentId } = req.params;
+  const { commentId } = req.params; //can be whitespace / :commentId
 
   //TODO: 1 check commentId
-  if (isInvalidOrEmptyId(commentId))
+  if (isInvalidOrEmptyId(commentId, ":commentId"))
     throw new ApiError(400, "Invalid comment id or not provided! ! !");
 
   //TODO: 2 check comment exists ? {_id} : null
@@ -142,8 +141,7 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
   });
 
   if (!commentExistsId._id) {
-    //!experimental
-    existsCheck(commentId, Comment, "toggleCommentLike");
+    existsCheck(commentId, Comment, "toggleCommentLike"); //!experimental
     throw new ApiError(404, "Comment does not exist! ! !");
   }
 
@@ -275,6 +273,7 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     limit: 10,
   };
 
+  // console.log(aggregateLikedVideos, " : aggregateLikedVideos");
   try {
     Like.aggregatePaginate(aggregateLikedVideos, options)
       .then(function (likedVideos) {
