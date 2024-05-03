@@ -30,11 +30,11 @@ const getAllVideos = asyncHandler(async (req, res) => {
   limit = Math.min(20, Math.max(1, limit)); // limit should be between 1 and 20 //ex: limit is 0, it will be set to 1 / limit is 50, it will be set to 20
 
   const pipeline = [];
-
+  //  ! check refactore
   //TODO: 3 userId ? match videos according to checks for userId
   if (userId) {
-    if (!isValidObjectId(userId)) {
-      throw new ApiError(400, "Invalid userId");
+    if (!userId) {
+      throw new ApiError(400, "Invalid userId! ! !");
     }
 
     if (userId !== req.user?._id.toString()) {
@@ -112,29 +112,48 @@ const getAllVideos = asyncHandler(async (req, res) => {
     //TODO: 6 execute the aggregation pipeline
     const videos = await Video.aggregate(pipeline).exec();
 
-    //TODO: 7 populate fields
+    //TODO: 7 populate fields with documents count/documents
     for (let video of videos) {
-      const likes = await Like.find({ video: video._id }).populate(
-        "likedBy",
-        "fullName username"
-      );
-      video.likes = likes.map((like) => like.likedBy);
+      const likeCount = await Like.countDocuments({ video: video._id });
+      video.likesCount = likeCount;
+      // console.log(`Video ${video._id} has ${likeCount} likes`);
+      const commentCount = await Comment.countDocuments({ video: video._id });
+      video.commentCount = commentCount;
 
       const ownerDets = await User.findById(video.videoOwner).select(
         "fullName username"
       );
       video.videoOwner = ownerDets;
+
+      // const likes = await Like.find({ video: video._id }).populate(
+      //   "likedBy",
+      //   "fullName username"
+      // );
+      // // video.likes = likes.map((like) => like.likedBy);
+      // video.likesCount = likes.length;
     }
 
-    // const videos = await Video.aggregatePaginate(pipeline);
-    console.log(videos.length, " : videos.length");
-    if (!videos) {
-      throw new ApiError(500, "Error in fetching videos! ! !");
-    }
+    const options = {
+      page: 1,
+      limit: 10,
+    };
+    // const videos = await Video.aggregatePaginate(pipeline, options);
+    // console.log(videos.length, " : videos.length");
+    // if (!videos) {
+    //   throw new ApiError(500, "Error in fetching videos! ! !");
+    // }
 
     return res
       .status(200)
-      .json(new ApiResponse(200, videos, "Videos fetched successfully!!!"));
+      .json(
+        new ApiResponse(
+          200,
+          videos,
+          videos.length > 0
+            ? "Videos fetched successfully!!!"
+            : "No videos found!!!"
+        )
+      );
   } catch (error) {
     throw new ApiError(500, error?.message || "Error in fetching videos! ! !");
   }
@@ -150,7 +169,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   // console.log("\n",videoFileLocalPath,"\n",thumbnailFileLocalPath," : file paths \n");
 
   //TODO: 1 check title, description & files local path saved by middleware
-  const isFieldEmpty = (field) => !field || field.trim() === "";
+  const isFieldEmpty = (field) => !field || field.trim() === ""; //?include undefined
 
   if (
     isFieldEmpty(title) ||
@@ -218,10 +237,10 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
 //TODO: The fn fetches video by videoId(only published) and populate likes and comments count and videoOwner field, updates views & watchHistory
 const getVideoById = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const { videoId } = req.params; //can be whitespace / :videoId
 
   //TODO: 1 check videoId
-  if (isInvalidOrEmptyId(videoId)) {
+  if (isInvalidOrEmptyId(videoId, ":videoId")) {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
   }
 
@@ -297,10 +316,10 @@ const getVideoById = asyncHandler(async (req, res) => {
 
 //TODO: The fn updates video details title, description, thumbnail if atleast any one from it provided (only video owner can update details)
 const updateVideo = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const { videoId } = req.params; //can be whitespace / :videoId
 
   //TODO: 1 check videoId
-  if (isInvalidOrEmptyId(videoId))
+  if (isInvalidOrEmptyId(videoId, ":videoId"))
     throw new ApiError(400, "Invalid video id or not provided! ! !");
 
   //TODO: 2 find video
@@ -352,7 +371,7 @@ const updateVideo = asyncHandler(async (req, res) => {
       // console.log(thumbnail, ": thumbnail in TODO 5");
 
       if (!thumbnail.url || thumbnail.url === "") {
-        throw new ApiError(500, "Error in uploading thumbnail! ! !"); ///! try givivng error then decide for eeeror handling
+        // throw new ApiError(500, "Error in uploading thumbnail! ! !"); ///! try givivng error then decide for eeeror handling
       } else {
         video.thumbnail = thumbnail.url;
       }
@@ -381,10 +400,10 @@ const updateVideo = asyncHandler(async (req, res) => {
 
 //TODO: The fn deletes all docs related to requested video when requested video deletes successfully in this function by video owner
 const deleteVideo = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const { videoId } = req.params; //can be whitespace / :videoId
 
   //TODO: 1 check videoId
-  if (isInvalidOrEmptyId(videoId))
+  if (isInvalidOrEmptyId(videoId, ":videoId"))
     throw new ApiError(400, "Invalid video id or not provided! ! !");
 
   let videoExists;
@@ -514,10 +533,10 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
 //TODO: The fn toggles the publish status of the video by video owner
 const togglePublishStatus = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const { videoId } = req.params; //can be whitespace / :videoId
 
   //TODO: 1 check videoId
-  if (isInvalidOrEmptyId(videoId))
+  if (isInvalidOrEmptyId(videoId, ":videoId"))
     throw new ApiError(400, "Invalid video id or not provided! ! !");
 
   //TODO: 2 find video
