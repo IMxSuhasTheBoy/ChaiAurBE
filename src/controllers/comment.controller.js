@@ -12,10 +12,11 @@ import { Comment } from "../models/comment.model.js";
 import { Video } from "../models/video.model.js";
 import { CommunityPost } from "../models/communityPost.model.js";
 
+//likes projection isnt required
 //? insted of handling comment operations individualy for video, communityPost...maybe more additions in future, Can we make comment handling controller that can handle operations for any of the passed id.
 const getVideoComments = asyncHandler(async (req, res) => {
   //TODO: get all video comments only for now .. then try to make it work for communityPost also...
-  let { videoId } = req.params;
+  let { videoId } = req.params; //can be whitespace / :videoId
   let { page = 1, limit = 10 } = req.query;
 
   //TODO: 1 Parse page and limit to numbers. Base 10 (decimal): The default base if the radix is not provided. Numbers are represented using digits 0-9.
@@ -26,7 +27,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
   page = Math.max(1, page); // page should be greater than 0 //ex: page is -1, it will be set to 1 / page is 3, it will be set to 3
   limit = Math.min(20, Math.max(1, limit)); // limit should be between 1 and 20 //ex: limit is 0, it will be set to 1 / limit is 50, it will be set to 20
 
-  if (!isValidObjectId(videoId) || videoId.trim() === "" || !videoId) {
+  if (isInvalidOrEmptyId(videoId, ":videoId")) {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
     //check for video owner match with logged in user isnt required
   }
@@ -34,7 +35,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
   const video = await Video.findById(videoId).exec(); //?if call operation failing
 
   if (!video) {
-    //call util
+    existsCheck(videoId, Video, "getVideoComments"); //!experimental
     throw new ApiError(404, "Video not found! ! !");
   }
   if (!video.isPublished) {
@@ -158,10 +159,10 @@ const getVideoComments = asyncHandler(async (req, res) => {
   }
 });
 
-///!testing  required adjust as per req.
+///!testing  required adjust as per req. like isnt neeeded to project
 const getCommunityPostComments = asyncHandler(async (req, res) => {
   //TODO: get all video comments only for now .. then try to make it work for communityPost also...
-  let { communityPostId } = req.params;
+  let { communityPostId } = req.params; //can be whitespace / :communityPostId
   let { page = 1, limit = 10 } = req.query;
 
   //TODO: 1 Parse page and limit to numbers. Base 10 (decimal): The default base if the radix is not provided. Numbers are represented using digits 0-9.
@@ -172,14 +173,14 @@ const getCommunityPostComments = asyncHandler(async (req, res) => {
   page = Math.max(1, page); // page should be greater than 0 //ex: page is -1, it will be set to 1 / page is 3, it will be set to 3
   limit = Math.min(20, Math.max(1, limit)); // limit should be between 1 and 20 //ex: limit is 0, it will be set to 1 / limit is 50, it will be set to 20
 
-  if (isInvalidOrEmptyId(communityPostId)) {
+  if (isInvalidOrEmptyId(communityPostId, ":communityPostId")) {
     throw new ApiError(400, "Invalid community post id or not provided! ! !");
     //check for communityPost owner match with logged in user isnt required
   }
   const communityPost = await CommunityPost.findById(communityPostId).exec(); //?if call operation failing
 
   if (!communityPost) {
-    //call util
+    existsCheck(communityPostId, CommunityPost, "getCommunityPostComments"); //!experimental
     throw new ApiError(404, "Community post not found! ! !");
   }
   const options = {
@@ -303,10 +304,10 @@ const getCommunityPostComments = asyncHandler(async (req, res) => {
 
 // TODO: The fn adds a new comment on a video by the logged in user, the video must be published: true
 const addCommentOnVideo = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const { videoId } = req.params; //can be whitespace / :videoId
 
   //TODO: 1 check videoId
-  if (isInvalidOrEmptyId(videoId)) {
+  if (isInvalidOrEmptyId(videoId, ":videoId")) {
     throw new ApiError(400, "Invalid video id or not provided! ! !");
   }
   //TODO: 2 find video
@@ -359,16 +360,14 @@ const addCommentOnVideo = asyncHandler(async (req, res) => {
 
 // TODO: The fn adds a new comment on a communityPost by the logged in user
 const addCommentOnCommunityPost = asyncHandler(async (req, res) => {
-  const { communityPostId } = req.params;
+  const { communityPostId } = req.params; //can be whitespace / :communityPostId
 
   //TODO: 1 check communityPostId
-  if (isInvalidOrEmptyId(communityPostId))
+  if (isInvalidOrEmptyId(communityPostId, ":communityPostId"))
     throw new ApiError(400, "Invalid community post id or not provided! ! !");
 
   //TODO: 2 find community post
-  const communityPostExists = await CommunityPost.findOne({
-    _id: communityPostId,
-  });
+  const communityPostExists = await CommunityPost.findById(communityPostId);
 
   if (!communityPostExists) {
     existsCheck(communityPostId, CommunityPost, "addCommentOnCommunityPost"); //!experimental
@@ -392,6 +391,15 @@ const addCommentOnCommunityPost = asyncHandler(async (req, res) => {
       communityPost: communityPostExists._id,
     });
 
+    //TODO: 5 update community post comments count
+    await CommunityPost.findByIdAndUpdate(
+      communityPostId,
+      {
+        $inc: { commentsCount: 1 },
+      },
+      { new: true }
+    );
+
     return res
       .status(201)
       .json(
@@ -411,17 +419,17 @@ const addCommentOnCommunityPost = asyncHandler(async (req, res) => {
 
 // TODO: The fn updates the requested comment only when new content provided in the request body, by the logged in comment owner
 const updateComment = asyncHandler(async (req, res) => {
-  const { commentId } = req.params;
+  const { commentId } = req.params; //can be whitespace / :commentId
 
   //TODO: 1 check commentId
-  if (isInvalidOrEmptyId(commentId))
+  if (isInvalidOrEmptyId(commentId, ":commentId"))
     throw new ApiError(400, "Invalid comment id or not provided! ! !");
 
   //TODO: 2 find comment
   const commentExists = await Comment.findById(commentId).exec();
 
   if (!commentExists) {
-    existsCheck(commentId, Comment, "updateComment");
+    existsCheck(commentId, Comment, "updateComment"); //!experimental
     throw new ApiError(404, "Comment not found! ! !");
   }
 
@@ -462,7 +470,7 @@ const updateComment = asyncHandler(async (req, res) => {
           "Video is not yet published, Cannot update comment! ! !"
         );
     } else {
-      existsCheck(commentExists.video, Video, "updateComment");
+      existsCheck(commentExists.video, Video, "updateComment"); //!experimental
       throw new ApiError(404, "Video not found! ! !-");
     }
   }
@@ -508,17 +516,19 @@ const updateComment = asyncHandler(async (req, res) => {
 
 // TODO: The fn deletes the requested comment & its likes by the logged in comment owner
 const deleteComment = asyncHandler(async (req, res) => {
-  const { commentId } = req.params;
+  const { commentId } = req.params; //can be whitespace / :commentId
+  // console.log("Request URL:", req.originalUrl);
 
   //TODO: 1 check commentId
-  if (isInvalidOrEmptyId(commentId))
+  if (isInvalidOrEmptyId(commentId, ":commentId"))
     throw new ApiError(400, "Invalid comment id or not provided! ! !");
 
   //TODO: 2 find comment
   const commentExists = await Comment.findById(commentId).exec();
+  // console.log("commentExists", commentExists);
 
   if (!commentExists) {
-    existsCheck(commentId, Comment, "deleteComment");
+    existsCheck(commentId, Comment, "deleteComment"); //!experimental
     throw new ApiError(404, "Comment not found! ! !");
   }
 
@@ -529,43 +539,67 @@ const deleteComment = asyncHandler(async (req, res) => {
       "You are not authorized to delete this comment! ! !"
     );
 
-  //TODO: for util
-  // const commentBelongsToExists = comment.video || comment.communityPost;
+  /*TODO: for util
+  // const commentBelongsToExists =
+  //   commentExists.video || commentExists.communityPost;
   // if (!commentBelongsToExists) {
+  //   existsCheck(commentExists.video, Video, "deleteComment"); //!experimental
+  //   existsCheck(commentExists.communityPost, CommunityPost, "deleteComment"); //!experimental
   //   throw new ApiError(
   //     404,
   //     "Comment does not belong to a video or a community post! ! !-"
   //   );
   // }
 
-  // if (comment.communityPost) {
+  // if (commentExists.communityPost) {
   //   const communityPostExists = await CommunityPost.exists(
-  //     comment.communityPost
+  //     commentExists.communityPost
   //   ).exec();
-  //   if (!communityPostExists) {
+  //   if (!communityPostExists)
   //     throw new ApiError(404, "Community post not found! ! !-");
-  //   }
-  // } else if (comment.video) {
+  // } else if (commentExists.video) {
   //   const video = await Video.findById(comment.video).exec();
   //   if (video) {
   //     if (!video.isPublished) {
   //       throw new ApiError(
   //         404,
-  //         "Video is not yet published, Cannot delete comment! ! !"
+  //         "Video is not yet published state, Cannot delete comment! ! !"
   //       );
   //     }
   //   } else {
   //     throw new ApiError(404, "Video not found! ! !-");
   //   }
   // }
+  */
 
-  //TODO: 4 delete comment
+  //TODO: 4 check is video published, if the comment belongs to video
+  if (commentExists.video) {
+    const video = await Video.findById(commentExists.video).exec();
+    if (video) {
+      if (!video.isPublished) {
+        throw new ApiError(
+          404,
+          "Video is not in published state, Cannot delete comment! ! !"
+        );
+      }
+    }
+  }
+
+  //TODO: 5 delete comment
   const deletedComment = await commentExists.deleteOne().exec();
 
   if (!deletedComment.acknowledged && deletedComment.deletedCount === 0)
     throw new ApiError(500, "Failed to delete comment! ! !");
 
-  //TODO: 5 delete comment likes after comment is deleted success
+  //TODO: 6 decrease comment count in cp after comment is deleted successfully, if the comment belongs to cp
+  if (commentExists.communityPost)
+    await CommunityPost.findByIdAndUpdate(
+      commentExists.communityPost,
+      { $inc: { commentsCount: -1 } },
+      { new: true }
+    );
+
+  //TODO: 7 delete comment likes after comment is deleted successfully
   const deletedCommentLikes = await Like.deleteMany({
     comment: new mongoose.Types.ObjectId(commentExists._id),
   });
