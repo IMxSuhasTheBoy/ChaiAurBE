@@ -63,6 +63,102 @@ const createPlaylist = asyncHandler(async (req, res) => {
     );
 });
 
+//TODO: The fn returns all playlists created by provided userId. //?how can i do sorting on frontend only?
+const getUserPlaylists = asyncHandler(async (req, res) => {
+  const { userId } = req.params; // can be whitespaces / :userId
+  // console.log(userId, " : userId");
+
+  //TODO: 1 user id differs from logged in user? check( user exists? exec pipeline : error) : exec pipeline
+  if (userId !== req.user?._id.toString()) {
+    if (isInvalidOrEmptyId(userId, ":userId"))
+      throw new ApiError(400, "Invalid User Id! ! !");
+
+    //find user
+    const userExistsId = await User.exists(new mongoose.Types.ObjectId(userId));
+
+    if (!userExistsId._id) throw new ApiError(400, "User not found! ! !");
+    // console.log(userExistsId, " : userExistsId");
+  }
+
+  //TODO: 2 define pipeline
+  const playlists = Playlist.aggregate([
+    {
+      //got all playlists docs
+      $match: {
+        playlistOwner: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      //left join video collection according to video ids present in playlist.videos
+      $lookup: {
+        from: "videos",
+        localField: "videos",
+        foreignField: "_id",
+        as: "videos", //overwriting videos array in playlist doc with video docs for each video ids
+      },
+    },
+    {
+      //additional informative field
+      //todo: userId is same as logged in user ? count videos : count only published videos(filterd)
+      $addFields: {
+        videosCount: {
+          $cond: {
+            if: {
+              $eq: [userId, req.user?._id.toString()],
+            },
+            then: {
+              $size: "$videos",
+            },
+            else: {
+              $size: {
+                $filter: {
+                  input: "$videos",
+                  as: "video",
+                  cond: { $eq: ["$$video.isPublished", true] },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        name: 1,
+        _id: 1,
+        createdAt: 1,
+        // videos: 1, //for testing
+        videosCount: 1,
+        playlistOwner: 1,
+      },
+    },
+  ]);
+
+  const options = {
+    page: 1,
+    limit: 10,
+    sort: { createdAt: -1 }, //only sort at backend: default sort by createdAt in descending order
+  };
+
+  Playlist.aggregatePaginate(playlists, options)
+    .then(function (playlists) {
+      // console.log(playlists);
+      console.log(playlists.docs.length, " : playlists length");
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(200, playlists, "Playlists fetched successfully!!!")
+        );
+    })
+    .catch(function (error) {
+      // console.log(error);
+      throw new ApiError(
+        500,
+        error?.message || `Error in fetching playlists! ! !`
+      );
+    });
+});
+
 export {
   createPlaylist,
   getUserPlaylists,
