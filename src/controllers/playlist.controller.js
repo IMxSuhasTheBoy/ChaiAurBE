@@ -288,6 +288,91 @@ const getPlaylistById = asyncHandler(async (req, res) => {
   }
 });
 
+
+//TODO: The fn updates playlist name, description and thumbnail if any of updation fields/file provided
+const updatePlaylist = asyncHandler(async (req, res) => {
+  const { playlistId } = req.params;
+  const { name, description } = req.body;
+  const playlistThumbnailLocalPath = req.file?.path;
+  console.log(playlistThumbnailLocalPath, " : playlistThumbnailLocalPath");
+
+  if (isInvalidOrEmptyId(playlistId, ":playlistId"))
+    throw new ApiError(400, "Invalid Playlist Id! ! !");
+
+  const playlist = await Playlist.findById(playlistId);
+
+  if (!playlist) {
+    existsCheck(playlistId, Playlist, "addVideoToPlaylist"); //!experimental
+    throw new ApiError(404, "Playlist not found! ! !");
+  } else if (playlist.playlistOwner.toString() !== req.user?._id.toString())
+    throw new ApiError(
+      403,
+      "You are not authorized to update this playlist! ! !"
+    );
+
+  if (
+    (name && name.trim() !== "" && name.trim() !== playlist.name) ||
+    (description &&
+      description.trim() !== "" &&
+      description.trim() !== playlist.description) ||
+    playlistThumbnailLocalPath !== undefined
+  ) {
+    // console.log("~ DB & cloud playlist details Update Operation initated~");
+
+    if (name) playlist.name = name.trim();
+
+    if (description) playlist.description = description.trim();
+
+    //TODO: 4 Have old thumbnail access for 7
+    let oldThumbnailUrl = playlist.thumbnail;
+    const folderPath = "chaiaurbe/playlists/playlist-thumbnails/";
+
+    //TODO: 5 Upload new thumbnail if provided ? assign it : error
+    let thumbnail = undefined; //will be new thumbnail if upload success else remains undefined
+    if (playlistThumbnailLocalPath !== undefined) {
+      thumbnail = await uploadOnCloudinary(
+        playlistThumbnailLocalPath,
+        "playlists/thumbnail"
+      );
+      console.log(thumbnail, ": thumbnail in TODO 5");
+
+      if (!thumbnail.url || thumbnail.url === "") {
+        // throw new ApiError(500, "Error in uploading thumbnail! ! !"); ///! try givivng error then decide for eeeror handling
+      } else {
+        playlist.thumbnail = thumbnail.url;
+      }
+    }
+    console.log(thumbnail, ": thumbnail out TODO 5");
+    //TODO: 6 | till Step 5 all details are set to video if provided |, now save video details in DB
+    const playlistUpdated = await playlist.save(
+      { validateBeforeSave: false },
+      { new: true }
+    );
+    console.log(playlistUpdated, ": TODO 6 : playlistUpdated");
+
+    //TODO: 7 destroy old if cloud uploaded matches with DB updated & not default? destroy Old : move
+    if (
+      oldThumbnailUrl !==
+        "http://res.cloudinary.com/dxmhivqtq/image/upload/v1714389465/chaiaurbe/playlists/defaultPlaylistThumbnail-1714389464841-313443645.jpg" &&
+      playlistUpdated?.thumbnail === thumbnail?.url
+    ) {
+      await destroyFileOnCloudinary(folderPath, oldThumbnailUrl);
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          playlist,
+          "Playlist details updated successfully!!!"
+        )
+      );
+  } else {
+    throw new ApiError(400, "No details provided to update playlist! ! !");
+  }
+});
+
 export {
   createPlaylist,
   getUserPlaylists,
