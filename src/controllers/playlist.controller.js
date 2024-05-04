@@ -288,7 +288,6 @@ const getPlaylistById = asyncHandler(async (req, res) => {
   }
 });
 
-
 //TODO: The fn updates playlist name, description and thumbnail if any of updation fields/file provided
 const updatePlaylist = asyncHandler(async (req, res) => {
   const { playlistId } = req.params;
@@ -372,7 +371,6 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     throw new ApiError(400, "No details provided to update playlist! ! !");
   }
 });
-
 
 //TODO: The fn adds video id to playlist videos array by playlist owner
 const addVideoToPlaylist = asyncHandler(async (req, res) => {
@@ -460,6 +458,88 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
   //   },
   //   {
   //     $inc: { videosCount: 1 },
+  //   },
+  //   { new: true }
+  // );
+});
+
+//TODO: The fn removes video from playlist by playlist owner
+const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
+  const { playlistId, videoId } = req.params;
+
+  const invalidIds = [];
+
+  if (isInvalidOrEmptyId(playlistId, ":playlistId"))
+    invalidIds.push("playlist Id");
+
+  if (isInvalidOrEmptyId(videoId, ":videoId")) invalidIds.push("video Id");
+
+  if (invalidIds.length > 0) {
+    const errorMessage = `Invalid ${invalidIds.join(" and ")}! ! !`;
+    throw new ApiError(400, errorMessage);
+  }
+
+  const playlist = await Playlist.findById(playlistId);
+  //.select(playlistOwner, videos, videosCount)
+  const video = await Video.findById(videoId);
+
+  if (!video) existsCheck(videoId, Video, "addVideoToPlaylist"); //!experimental
+
+  if (!playlist) {
+    existsCheck(playlistId, Playlist, "addVideoToPlaylist"); //!experimental
+    throw new ApiError(404, "Playlist not found! ! !");
+  } else if (playlist.playlistOwner.toString() !== req.user?._id.toString()) {
+    throw new ApiError(
+      403,
+      "You are not authorized to remove video from this playlist! ! !"
+    );
+  }
+
+  // if (!video) {
+  //   throw new ApiError(404, "Video not found! ! !");
+  // }
+
+  // Check if video exists in playlist
+  const videoIndex = playlist.videos.indexOf(video._id);
+
+  if (videoIndex === -1) {
+    throw new ApiError(400, "Video does not exist in playlist! ! !");
+  }
+
+  try {
+    // Remove video from playlist
+    playlist.videos.splice(videoIndex, 1);
+    // playlist.videosCount
+
+    const updatedPlaylist = await playlist.save();
+
+    // if (!updatedPlaylist) {
+    //   throw new ApiError(500, "Failed to remove video from playlist! ! !");
+    // }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          updatedPlaylist,
+          "Video removed from playlist successfully!!!"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Failed to remove video from playlist! ! !"
+    );
+  }
+
+  // await Playlist.findByIdAndUpdate(
+  //   playlistId,
+  // {
+  //  $removefromset: { videos: videoId },
+  // }
+  //   {
+  //     $inc: { videosCount: -1 },
   //   },
   //   { new: true }
   // );
