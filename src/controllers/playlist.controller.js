@@ -373,6 +373,98 @@ const updatePlaylist = asyncHandler(async (req, res) => {
   }
 });
 
+
+//TODO: The fn adds video id to playlist videos array by playlist owner
+const addVideoToPlaylist = asyncHandler(async (req, res) => {
+  const { playlistId, videoId } = req.params;
+
+  //TODO: 1 check ids
+  const invalidIds = [];
+
+  if (isInvalidOrEmptyId(playlistId, ":playlistId"))
+    invalidIds.push("playlist Id");
+
+  if (isInvalidOrEmptyId(videoId, ":videoId")) invalidIds.push("video Id");
+
+  if (invalidIds.length > 0) {
+    const errorMessage = `Invalid ${invalidIds.join(" and ")}! ! !`;
+    throw new ApiError(400, errorMessage);
+  }
+
+  //TODO: 2 check playlist and video
+  const playlist = await Playlist.findById(playlistId);
+  //.select(playlistOwner, videos, videosCount)
+  // console.log(playlist, " : playlist");
+  const video = await Video.findById(videoId);
+  // console.log(video, " : video");
+
+  if (!video) existsCheck(videoId, Video, "addVideoToPlaylist"); //!experimental
+
+  if (!playlist) {
+    existsCheck(playlistId, Playlist, "addVideoToPlaylist"); //!experimental
+    throw new ApiError(404, "Playlist not found! ! !");
+  } else if (playlist.playlistOwner.toString() !== req.user?._id.toString())
+    throw new ApiError(
+      403,
+      "You are not authorized to add video to this playlist! ! !"
+    );
+
+  if (!video) {
+    throw new ApiError(404, "Video not found! ! !");
+  } else if (!video.isPublished)
+    throw new ApiError(404, "Video not found! ! ! !");
+
+  //TODO: 4 Check if video exists in playlist already
+  const videoExistsInPlaylist = playlist.videos.includes(video._id);
+
+  if (videoExistsInPlaylist) {
+    // return res
+    //   .status(200)
+    //   .json(new ApiResponse(200, null, "Video already exists in playlist!!!"));
+    throw new ApiError(400, "Video already exists in playlist! ! !");
+  }
+
+  try {
+    //TODO: 5 Add video to playlist
+    playlist.videos.push(video._id);
+    // console.log(playlist, "push");
+    // playlist.videosCount
+
+    const updatedPlaylist = await playlist.save();
+    // console.log(updatedPlaylist, " : updatedPlaylist");
+
+    // if (!updatedPlaylist) {
+    //   throw new ApiError(500, "Failed to add video into playlist! ! !");
+    // }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          updatedPlaylist,
+          "Video added to playlist successfully!!!"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Failed to add video to playlist! ! !"
+    );
+  }
+
+  // await Playlist.findByIdAndUpdate(
+  //   playlistId,
+  //   {
+  //     $addToSet: { videos: videoId },
+  //   },
+  //   {
+  //     $inc: { videosCount: 1 },
+  //   },
+  //   { new: true }
+  // );
+});
+
 export {
   createPlaylist,
   getUserPlaylists,
