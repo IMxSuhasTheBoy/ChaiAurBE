@@ -159,6 +159,135 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
     });
 });
 
+//TODO: The fn returns playlist by id with its videos, and if the logged in user is the owner of the fetched playlist, it includes all videos (published and unpublished). If not, it includes only published videos.
+const getPlaylistById = asyncHandler(async (req, res) => {
+  const { playlistId } = req.params;
+
+  //TODO: 1 check id
+  if (isInvalidOrEmptyId(playlistId, ":playlistId")) {
+    throw new ApiError(400, "Invalid playlist Id! ! !");
+  }
+
+  //todo✔ video filter implemented before mapping projection of videos doc as per isPublished status
+  //todo✔ show all videos in fetched playlist if fetched playlist owner === current user then:{}
+  //todo✔ show only published videos in fetched playlist if fetched playlist owner !== current user else:{}
+  try {
+    const playlist = await Playlist.aggregate([
+      {
+        //got playlist doc
+        $match: {
+          _id: new mongoose.Types.ObjectId(playlistId),
+        },
+      },
+      {
+        //left join video collection according to video ids present in playlist.videos
+        $lookup: {
+          from: "videos",
+          localField: "videos",
+          foreignField: "_id",
+          as: "videos", //overwriting videos array in playlist doc with video docs for each video ids
+        },
+      },
+      {
+        //additional informative fields
+        $addFields: {
+          videosCount: {
+            publishedVideos: {
+              $size: {
+                $filter: {
+                  input: "$videos",
+                  as: "video",
+                  cond: { $eq: ["$$video.isPublished", true] },
+                },
+              },
+            },
+            unpublishedVideos: {
+              $size: {
+                $filter: {
+                  input: "$videos",
+                  as: "video",
+                  cond: { $eq: ["$$video.isPublished", false] },
+                },
+              },
+            },
+            totalVideos: {
+              $size: "$videos",
+            },
+          },
+        },
+      },
+      {
+        //playlist fields projection, videos:[{video doc}, {}...]  mapped projection
+        $project: {
+          name: 1,
+          thumbnail: 1,
+          description: 1,
+          playlistOwner: 1,
+          videosCount: 1,
+          //check : playlistOwner === logged in user?  then:{} unfiltered : else:{} filtered
+          videos: {
+            $cond: {
+              if: {
+                $eq: ["$playlistOwner", req.user?._id],
+              },
+              then: {
+                $map: {
+                  input: "$videos", //!Here loggedin user fetching his playlist in videos[] shows all vids. (published & also unpublished) : so make change in projection fields as per potential requirements
+                  as: "video",
+                  in: {
+                    _id: "$$video._id",
+                    title: "$$video.title",
+                    thumbnail: "$$video.thumbnail",
+                    duration: "$$video.duration",
+                    isPublished: "$$video.isPublished",
+                    views: "$$video.views",
+                    createdAt: "$$video.createdAt",
+                  },
+                },
+              },
+              else: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: "$videos",
+                      as: "video",
+                      cond: { $eq: ["$$video.isPublished", true] },
+                    },
+                  },
+                  as: "video",
+                  in: {
+                    _id: "$$video._id",
+                    title: "$$video.title",
+                    thumbnail: "$$video.thumbnail",
+                    duration: "$$video.duration",
+                    isPublished: "$$video.isPublished",
+                    views: "$$video.views",
+                    createdAt: "$$video.createdAt",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+    // console.log(playlist, " : playlist aggregate");
+    // console.log(playlist[0].videos.length, " : playlist aggregate length");
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          playlist,
+          "Playlist details fetched successfully!!!"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(500, error?.message || "Failed to fetch playlist! ! !");
+  }
+});
+
 export {
   createPlaylist,
   getUserPlaylists,
