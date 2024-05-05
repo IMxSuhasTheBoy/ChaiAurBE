@@ -545,6 +545,79 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
   // );
 });
 
+//TODO: The fn deletes playlist & all related docs by playlist owner
+const deletePlaylist = asyncHandler(async (req, res) => {
+  const { playlistId } = req.params; //can be whiespaces / :playlistId
+
+  //TODO: 1 check id
+  if (isInvalidOrEmptyId(playlistId, ":playlistId"))
+    throw new ApiError(400, "Invalid playlist Id! ! !");
+
+  //TODO: 2 find playlist
+  const playlistExists = await Playlist.findById(playlistId); //exp errorCode in
+
+  if (!playlistExists) {
+    existsCheck(playlistId, Playlist, "deletePlaylist"); //!experimental
+    throw new ApiError(404, "Playlist not found! ! !");
+  }
+
+  console.log(playlistExists?.playlistOwner, " : playlistExists owner");
+
+  if (playlistExists.playlistOwner?.toString() !== req.user?._id.toString())
+    throw new ApiError(
+      403,
+      "You are not authorized to delete this playlist! ! !"
+    );
+
+  //TODO: 3 check old thumbnail if any, Have old thumbnail access for 5
+  let oldThumbnailUrl;
+  console.log(oldThumbnailUrl, " : oldThumbnailUrl 1");
+  let folderPath = "chaiaurbe/playlists/playlist-thumbnails/";
+
+  if (
+    playlistExists.thumbnail !==
+    "http://res.cloudinary.com/dxmhivqtq/image/upload/v1714389465/chaiaurbe/playlists/defaultPlaylistThumbnail-1714389464841-313443645.jpg"
+  ) {
+    console.log("first", " : first");
+    oldThumbnailUrl = playlistExists.thumbnail;
+  }
+  console.log(oldThumbnailUrl, " : oldThumbnailUrl 2");
+
+  //TODO: 4 delete playlist
+  let deletedResponse;
+  try {
+    deletedResponse = await Playlist.deleteOne(playlistExists._id);
+    console.log(deletedResponse, " : deletedResponse");
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error in deleting playlist! ! !"
+    );
+  }
+
+  //TODO: 5 destroy old thumbnail if any after playlist delete success
+  if (
+    oldThumbnailUrl &&
+    deletedResponse.acknowledged &&
+    deletedResponse.deletedCount > 0
+  ) {
+    const destroyResponse = await destroyFileOnCloudinary(
+      folderPath,
+      oldThumbnailUrl
+    );
+    console.log(destroyResponse, " : destroyResponse");
+  }
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { deletedResponse, playlistExists, playlistId },
+      // null,
+      "Playlist deleted successfully! ! !"
+    )
+  );
+});
+
 export {
   createPlaylist,
   getUserPlaylists,
