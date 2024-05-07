@@ -30,10 +30,6 @@ import playlistRouter from "./routes/playlist.routes.js";
 
 //TODO: routes declaration
 
-app.use("/", (req, res) => {
-  res.send("Hello World");
-});
-
 app.use("/api/v1/healthcheck", healthcheckRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/videos", videoRouter);
@@ -43,4 +39,7 @@ app.use("/api/v1/comments", commentRouter);
 app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/playlists", playlistRouter);
 
+app.use("/", (req, res) => {
+  res.send("Hello World");
+});
 export { app };
